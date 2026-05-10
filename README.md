@@ -41,7 +41,7 @@ Once the containers are running, you can access the following:
 
 ## 📡 Connecting Sensors
 
-Sensor nodes (ESP32/ESP8266) should be configured to send data via TCP:
+Sensor nodes should be configured to send data via TCP:
 
 - **Server IP**: Your computer's local IP (e.g., `192.168.x.x`)
 - **Port**: `1024`
