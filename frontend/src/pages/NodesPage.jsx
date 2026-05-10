@@ -121,7 +121,7 @@ export default function NodesPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
                   <label>Node Name</label>
-                  <input className="form-input" placeholder="e.g. TMS Node 1"
+                  <input className="form-input" placeholder="e.g. TEMPSENSE Node 1"
                     value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 </div>
                 <div className="form-group">

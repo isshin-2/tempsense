@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   device_id       INT NOT NULL UNIQUE,
   name            VARCHAR(200) NOT NULL,
   ip_address      VARCHAR(45),
-  tcp_port        INT DEFAULT 8080,
+  tcp_port        INT DEFAULT 1024,
   sampling_interval INT DEFAULT 5,
   temp_high       FLOAT DEFAULT 30.0,
   temp_low        FLOAT DEFAULT 2.0,

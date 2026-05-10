@@ -1,6 +1,8 @@
 import { io } from 'socket.io-client';
 
-const API_BASE = 'http://localhost:3001/api';
+// Use environment variable if provided (for development), otherwise default to relative path
+const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 // ===== Auth =====
 export function getToken() {
@@ -166,7 +168,12 @@ let socket = null;
 
 export function connectSocket(onSensorData) {
   if (socket) socket.disconnect();
-  socket = io('http://localhost:3001');
+  // In production (Docker), SOCKET_URL will be the origin (port 80).
+  // In development (Vite), SOCKET_URL will default to origin (port 5173),
+  // so we need Vite to proxy it or specify the backend URL.
+  socket = io(SOCKET_URL, {
+    path: '/socket.io',
+  });
   socket.on('sensorData', onSensorData);
   socket.on('connect', () => console.log('[WS] Connected'));
   socket.on('disconnect', () => console.log('[WS] Disconnected'));
@@ -179,3 +186,4 @@ export function disconnectSocket() {
     socket = null;
   }
 }
+

@@ -24,7 +24,7 @@ const nodeRoutes = require('./routes/nodes');
 const dataRoutes = require('./routes/data');
 
 const PORT = parseInt(process.env.PORT) || 3001;
-const TCP_PORT = parseInt(process.env.TCP_PORT) || 8080;
+const TCP_PORT = parseInt(process.env.TCP_PORT) || 1024;
 
 const app = express();
 const server = http.createServer(app);

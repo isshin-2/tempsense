@@ -89,7 +89,7 @@ Maxworth Techserv
       await transporter.sendMail({
         from: process.env.ALERT_FROM || 'alerts@tempsense.io',
         to: recipient,
-        subject: `🚨 TMS Alert: ${nodeName} @ ${siteName} - Threshold Breach`,
+        subject: `🚨 TEMPSENSE Alert: ${nodeName} @ ${siteName} - Threshold Breach`,
         text: emailBody,
       });
       console.log(`[ALERT] Email sent to ${recipient} for node ${nodeId}`);
