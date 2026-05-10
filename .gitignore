@@ -20,5 +20,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Docker
-.dockerignore
+# Docker volumes
+pgdata/
