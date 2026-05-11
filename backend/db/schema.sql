@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   room_id         INT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   device_id       INT NOT NULL UNIQUE,
   name            VARCHAR(200) NOT NULL,
+  location        VARCHAR(300),
   ip_address      VARCHAR(45),
   tcp_port        INT DEFAULT 1024,
   sampling_interval INT DEFAULT 5,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   humidity_low    FLOAT DEFAULT 20.0,
   is_active       BOOLEAN DEFAULT TRUE,
   last_seen       TIMESTAMP,
+  notes           TEXT,
   created_at      TIMESTAMP DEFAULT NOW()
 );
 
@@ -85,6 +87,41 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 CREATE INDEX IF NOT EXISTS idx_alerts_node_time
   ON alerts (node_id, sent_at DESC);
+
+-- 8. SMTP SETTINGS
+CREATE TABLE IF NOT EXISTS smtp_settings (
+  id           SERIAL PRIMARY KEY,
+  host         VARCHAR(255) NOT NULL,
+  port         INT NOT NULL,
+  user_email   VARCHAR(255) NOT NULL,
+  password     VARCHAR(255) NOT NULL,
+  secure       BOOLEAN DEFAULT FALSE,
+  sender_name  VARCHAR(255),
+  updated_at   TIMESTAMP DEFAULT NOW()
+);
+
+-- 9. SCHEDULED REPORTS
+CREATE TABLE IF NOT EXISTS scheduled_reports (
+  id           SERIAL PRIMARY KEY,
+  name         VARCHAR(200) NOT NULL,
+  frequency    VARCHAR(20) NOT NULL, -- 'daily', 'weekly', 'monthly'
+  recipients   TEXT NOT NULL, -- Comma separated emails
+  site_id      INT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  report_type  VARCHAR(20) DEFAULT 'pdf', -- 'pdf', 'csv', 'both'
+  is_active    BOOLEAN DEFAULT TRUE,
+  last_run     TIMESTAMP,
+  created_at   TIMESTAMP DEFAULT NOW()
+);
+
+-- 10. EMAIL LOGS
+CREATE TABLE IF NOT EXISTS email_logs (
+  id           SERIAL PRIMARY KEY,
+  type         VARCHAR(50), -- 'alert', 'scheduled_report'
+  recipient    TEXT,
+  status       VARCHAR(20), -- 'success', 'failure'
+  error_message TEXT,
+  sent_at      TIMESTAMP DEFAULT NOW()
+);
 
 -- Seed: Default account & super admin
 INSERT INTO accounts (name) VALUES ('Maxworth Techserv')

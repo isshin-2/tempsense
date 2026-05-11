@@ -163,6 +163,59 @@ export function exportPDF(params) {
   window.open(`${API_BASE}/data/export/pdf?${qs}&token=${getToken()}`, '_blank');
 }
 
+// ===== Settings & SMTP =====
+export async function fetchSMTP() {
+  const res = await fetch(`${API_BASE}/settings/smtp`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch SMTP settings');
+  return res.json();
+}
+
+export async function updateSMTP(data) {
+  const res = await fetch(`${API_BASE}/settings/smtp`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update SMTP settings');
+  return res.json();
+}
+
+export async function testSMTP() {
+  const res = await fetch(`${API_BASE}/settings/smtp/test`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'SMTP test failed');
+  return data;
+}
+
+// ===== Scheduled Reports =====
+export async function fetchSchedules() {
+  const res = await fetch(`${API_BASE}/settings/reports`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch schedules');
+  return res.json();
+}
+
+export async function createSchedule(data) {
+  const res = await fetch(`${API_BASE}/settings/reports`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create schedule');
+  return res.json();
+}
+
+export async function updateSchedule(id, data) {
+  const res = await fetch(`${API_BASE}/settings/reports/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update schedule');
+  return res.json();
+}
+
+export async function deleteSchedule(id) {
+  const res = await fetch(`${API_BASE}/settings/reports/${id}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to delete schedule');
+  return res.json();
+}
+
 // ===== WebSocket =====
 let socket = null;
 

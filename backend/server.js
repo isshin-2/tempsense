@@ -14,6 +14,7 @@ const cors = require('cors');
 const { Server } = require('socket.io');
 const bcrypt = require('bcryptjs');
 const pool = require('./db/pool');
+const { startReportScheduler } = require('./services/reportScheduler');
 const { startTCPServer, setSocketIO } = require('./services/tcpServer');
 
 // Routes
@@ -22,6 +23,7 @@ const siteRoutes = require('./routes/sites');
 const roomRoutes = require('./routes/rooms');
 const nodeRoutes = require('./routes/nodes');
 const dataRoutes = require('./routes/data');
+const settingsRoutes = require('./routes/settings');
 
 const PORT = parseInt(process.env.PORT) || 3001;
 const TCP_PORT = parseInt(process.env.TCP_PORT) || 1024;
@@ -44,6 +46,7 @@ app.use('/api/sites', siteRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/nodes', nodeRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -72,7 +75,12 @@ async function initDB() {
     const path = require('path');
     const schema = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf-8');
     await pool.query(schema);
-    console.log('[DB] Schema applied');
+    
+    // Migrations for existing tables
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS location VARCHAR(300)`);
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS notes TEXT`);
+
+    console.log('[DB] Schema applied and migrations checked');
 
     // Seed default super admin if no users exist
     const userCheck = await pool.query('SELECT COUNT(*) as count FROM users');
@@ -95,6 +103,9 @@ async function initDB() {
 // ===== Start =====
 async function start() {
   await initDB();
+  
+  // Start Report Scheduler
+  startReportScheduler();
 
   server.listen(PORT, () => {
     console.log(`\n====================================`);

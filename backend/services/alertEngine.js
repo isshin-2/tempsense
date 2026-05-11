@@ -1,16 +1,5 @@
-const nodemailer = require('nodemailer');
 const pool = require('../db/pool');
-require('dotenv').config();
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const { sendEmail } = require('./emailService');
 
 /**
  * Check if an alert was already sent for this node within the last hour.
@@ -66,7 +55,10 @@ async function checkAndAlert(nodeId, nodeName, roomName, siteName, readings) {
 
     const alertType = 'threshold_breach';
     const message = breaches.join('\n');
-    const recipient = process.env.ALERT_TO || 'admin@maxworth.in';
+    
+    // Fetch global alert recipient from settings or env
+    const smtpRes = await pool.query('SELECT user_email FROM smtp_settings LIMIT 1');
+    const recipient = smtpRes.rows[0]?.user_email || process.env.ALERT_TO || 'admin@maxworth.in';
 
     const emailBody = `
 ⚠️ TEMPSENSE THRESHOLD ALERT
@@ -84,10 +76,9 @@ This is an automated alert from the Tempsense Monitoring System.
 Maxworth Techserv
     `.trim();
 
-    // Send email
+    // Send email via emailService
     try {
-      await transporter.sendMail({
-        from: process.env.ALERT_FROM || 'alerts@tempsense.io',
+      await sendEmail({
         to: recipient,
         subject: `🚨 TEMPSENSE Alert: ${nodeName} @ ${siteName} - Threshold Breach`,
         text: emailBody,

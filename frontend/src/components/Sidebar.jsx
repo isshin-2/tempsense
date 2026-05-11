@@ -7,6 +7,8 @@ import {
   Cpu,
   BarChart3,
   Bell,
+  Settings,
+  Calendar,
   LogOut,
   Thermometer
 } from 'lucide-react';
@@ -22,6 +24,15 @@ export default function Sidebar() {
     { to: '/reports', icon: <BarChart3 size={18} />, label: 'Reports' },
     { to: '/alerts', icon: <Bell size={18} />, label: 'Alerts' },
   ];
+
+  // Admin only links
+  if (user?.role === 'super_admin' || user?.role === 'site_admin') {
+    links.push({ to: '/scheduled-reports', icon: <Calendar size={18} />, label: 'Scheduled Reports' });
+  }
+  
+  if (user?.role === 'super_admin') {
+    links.push({ to: '/settings', icon: <Settings size={18} />, label: 'System Settings' });
+  }
 
   return (
     <aside className="sidebar">

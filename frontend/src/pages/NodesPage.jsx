@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import { fetchNodes, fetchRooms, createNode, deleteNode } from '../services/api';
-import { Cpu, Plus, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { fetchNodes, fetchRooms, createNode, updateNode, deleteNode } from '../services/api';
+import { Cpu, Plus, Trash2, Edit2, Wifi, WifiOff, Loader2 } from 'lucide-react';
 
 export default function NodesPage() {
   const [nodes, setNodes] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [editingNode, setEditingNode] = useState(null);
+  
   const [form, setForm] = useState({
-    roomId: '', deviceId: '', name: '', ipAddress: '',
+    roomId: '', deviceId: '', name: '', location: '', ipAddress: '',
     tcpPort: 8080, samplingInterval: 5,
     tempHigh: 30, tempLow: 2, humidityHigh: 80, humidityLow: 20,
+    notes: '', isActive: true
   });
 
   useEffect(() => {
@@ -18,26 +22,68 @@ export default function NodesPage() {
   }, []);
 
   async function loadNodes() {
+    setLoading(true);
     try { setNodes(await fetchNodes()); } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   }
 
-  async function handleCreate(e) {
+  function handleEdit(node) {
+    setEditingNode(node);
+    setForm({
+      roomId: node.room_id,
+      deviceId: node.device_id,
+      name: node.name,
+      location: node.location || '',
+      ipAddress: node.ip_address || '',
+      tcpPort: node.tcp_port || 8080,
+      samplingInterval: node.sampling_interval || 5,
+      tempHigh: node.temp_high,
+      tempLow: node.temp_low,
+      humidityHigh: node.humidity_high,
+      humidityLow: node.humidity_low,
+      isActive: node.is_active,
+      notes: node.notes || '',
+    });
+    setShowModal(true);
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
+    setLoading(true);
     try {
-      await createNode(form);
+      if (editingNode) {
+        await updateNode(editingNode.id, form);
+      } else {
+        await createNode(form);
+      }
       setShowModal(false);
-      setForm({
-        roomId: '', deviceId: '', name: '', ipAddress: '',
-        tcpPort: 8080, samplingInterval: 5,
-        tempHigh: 30, tempLow: 2, humidityHigh: 80, humidityLow: 20,
-      });
+      setEditingNode(null);
+      resetForm();
       loadNodes();
-    } catch (err) { alert(err.message); }
+    } catch (err) { 
+      alert(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
+  }
+
+  function resetForm() {
+    setForm({
+      roomId: '', deviceId: '', name: '', location: '', ipAddress: '',
+      tcpPort: 8080, samplingInterval: 5,
+      tempHigh: 30, tempLow: 2, humidityHigh: 80, humidityLow: 20,
+      notes: '', isActive: true
+    });
   }
 
   async function handleDelete(id) {
     if (!confirm('Delete this node and all its data?')) return;
-    try { await deleteNode(id); loadNodes(); } catch (err) { alert(err.message); }
+    try { 
+      await deleteNode(id); 
+      loadNodes(); 
+    } catch (err) { 
+      alert(err.message); 
+    }
   }
 
   return (
@@ -47,69 +93,76 @@ export default function NodesPage() {
           <h2>Sensor Nodes</h2>
           <p>IoT hardware units mapped to rooms</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={() => { resetForm(); setEditingNode(null); setShowModal(true); }}>
           <Plus size={16} /> Add Node
         </button>
       </div>
 
       <div className="page-body">
-        {nodes.length === 0 ? (
+        {loading && nodes.length === 0 ? (
+          <div className="text-center mt-24"><Loader2 className="animate-spin inline mr-2" /> Loading nodes...</div>
+        ) : nodes.length === 0 ? (
           <div className="text-center mt-24" style={{ color: 'var(--text-muted)' }}>
             <Cpu size={48} style={{ marginBottom: '12px', opacity: 0.3 }} />
             <p>No nodes configured. Create a room first.</p>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Node Name</th>
-                <th>Device ID</th>
-                <th>Room</th>
-                <th>Site</th>
-                <th>IP</th>
-                <th>Temp Range</th>
-                <th>Humidity Range</th>
-                <th>Last Seen</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {nodes.map((n) => {
-                const lastSeen = n.last_seen ? new Date(n.last_seen) : null;
-                const staleMin = lastSeen ? (Date.now() - lastSeen.getTime()) / 60000 : Infinity;
-                const online = staleMin < 2;
-                return (
-                  <tr key={n.id}>
-                    <td>{online ? <Wifi size={14} style={{ color: 'var(--accent-green)' }} /> : <WifiOff size={14} style={{ color: 'var(--accent-red)' }} />}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.name}</td>
-                    <td>{n.device_id}</td>
-                    <td>{n.room_name}</td>
-                    <td>{n.site_name}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{n.ip_address || '--'}</td>
-                    <td>{n.temp_low}° — {n.temp_high}°C</td>
-                    <td>{n.humidity_low}% — {n.humidity_high}%</td>
-                    <td style={{ fontSize: '12px' }}>
-                      {lastSeen ? lastSeen.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Never'}
-                    </td>
-                    <td>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Node Name</th>
+                  <th>Device ID</th>
+                  <th>Room</th>
+                  <th>Location</th>
+                  <th>Temp Range</th>
+                  <th>Humidity Range</th>
+                  <th>Last Seen</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((n) => {
+                  const lastSeen = n.last_seen ? new Date(n.last_seen) : null;
+                  const staleMin = lastSeen ? (Date.now() - lastSeen.getTime()) / 60000 : Infinity;
+                  const online = staleMin < 2;
+                  return (
+                    <tr key={n.id}>
+                      <td>{online ? <Wifi size={14} style={{ color: 'var(--accent-green)' }} /> : <WifiOff size={14} style={{ color: 'var(--accent-red)' }} />}</td>
+                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.name}</td>
+                      <td>{n.device_id}</td>
+                      <td>{n.room_name}</td>
+                      <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{n.location || '--'}</td>
+                      <td>{n.temp_low}° — {n.temp_high}°C</td>
+                      <td>{n.humidity_low}% — {n.humidity_high}%</td>
+                      <td style={{ fontSize: '12px' }}>
+                        {lastSeen ? lastSeen.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Never'}
+                      </td>
+                      <td>
+                        <div className="flex gap-2">
+                          <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(n)}>
+                            <Edit2 size={14} />
+                          </button>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={() => setShowModal(false) || setEditingNode(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <h3>Add Sensor Node</h3>
-            <form onSubmit={handleCreate}>
+            <h3>{editingNode ? 'Edit Sensor Node' : 'Add Sensor Node'}</h3>
+            <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Room</label>
                 <select className="form-input" value={form.roomId}
@@ -121,7 +174,7 @@ export default function NodesPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
                   <label>Node Name</label>
-                  <input className="form-input" placeholder="e.g. TEMPSENSE Node 1"
+                  <input className="form-input" placeholder="e.g. Node 1"
                     value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 </div>
                 <div className="form-group">
@@ -129,6 +182,11 @@ export default function NodesPage() {
                   <input className="form-input" type="number" placeholder="e.g. 1"
                     value={form.deviceId} onChange={(e) => setForm({ ...form, deviceId: parseInt(e.target.value) || '' })} required />
                 </div>
+              </div>
+              <div className="form-group">
+                <label>Physical Location / Description</label>
+                <input className="form-input" placeholder="e.g. Near the door, Rack 4"
+                  value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
@@ -166,9 +224,22 @@ export default function NodesPage() {
                     value={form.humidityHigh} onChange={(e) => setForm({ ...form, humidityHigh: parseFloat(e.target.value) })} />
                 </div>
               </div>
+              <div className="form-group">
+                <label>Notes / Metadata</label>
+                <textarea className="form-input" rows="2" placeholder="Maintenance history, etc."
+                  value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              </div>
+              <div className="form-group flex items-center gap-2">
+                <input type="checkbox" id="isActive" checked={form.isActive}
+                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+                <label htmlFor="isActive">Node is Active</label>
+              </div>
               <div className="modal-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => setShowModal(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit">Create Node</button>
+                <button className="btn btn-ghost" type="button" onClick={() => setShowModal(false) || setEditingNode(null)}>Cancel</button>
+                <button className="btn btn-primary" type="submit" disabled={loading}>
+                  {loading && <Loader2 size={14} className="animate-spin mr-2" />}
+                  {editingNode ? 'Update Node' : 'Create Node'}
+                </button>
               </div>
             </form>
           </div>

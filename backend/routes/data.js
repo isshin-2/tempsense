@@ -94,7 +94,7 @@ router.get('/export/csv', authMiddleware, async (req, res) => {
 
     let query = `
       SELECT sd.recorded_at, n.name as node_name, n.device_id, r.name as room_name,
-             sd.t1, sd.t2, sd.td, sd.humidity
+             sd.t1, sd.t2, sd.td, sd.humidity, n.temp_high, n.temp_low, n.humidity_high, n.humidity_low
       FROM sensor_data sd
       JOIN nodes n ON sd.node_id = n.id
       JOIN rooms r ON n.room_id = r.id
@@ -115,20 +115,34 @@ router.get('/export/csv', authMiddleware, async (req, res) => {
 
     const result = await pool.query(query, params);
 
-    const csvData = result.rows.map(r => ({
-      Timestamp: new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-      Node: r.node_name,
-      DeviceID: r.device_id,
-      Room: r.room_name,
-      'T1 (°C)': r.t1 !== null ? r.t1.toFixed(2) : '',
-      'T2 (°C)': r.t2 !== null ? r.t2.toFixed(2) : '',
-      'DHT Temp (°C)': r.td !== null ? r.td.toFixed(2) : '',
-      'Humidity (%)': r.humidity !== null ? r.humidity.toFixed(2) : '',
-    }));
+    const csvData = result.rows.map(r => {
+      const alerts = [];
+      if (r.t1 > r.temp_high) alerts.push('T1 High');
+      if (r.t1 < r.temp_low) alerts.push('T1 Low');
+      if (r.t2 > r.temp_high) alerts.push('T2 High');
+      if (r.t2 < r.temp_low) alerts.push('T2 Low');
+      if (r.td > r.temp_high) alerts.push('DHT High');
+      if (r.td < r.temp_low) alerts.push('DHT Low');
+      if (r.humidity > r.humidity_high) alerts.push('Hum High');
+      if (r.humidity < r.humidity_low) alerts.push('Hum Low');
 
+      return {
+        Timestamp: new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        Node: r.node_name,
+        DeviceID: r.device_id,
+        Room: r.room_name,
+        'T1 (°C)': r.t1 !== null ? r.t1.toFixed(2) : '',
+        'T2 (°C)': r.t2 !== null ? r.t2.toFixed(2) : '',
+        'DHT Temp (°C)': r.td !== null ? r.td.toFixed(2) : '',
+        'Humidity (%)': r.humidity !== null ? r.humidity.toFixed(2) : '',
+        'Alerts/Status': alerts.length > 0 ? alerts.join(', ') : 'Normal'
+      };
+    });
+
+    const filename = `tempsense_report_${new Date().toISOString().split('T')[0]}.csv`;
     const csv = stringify(csvData, { header: true });
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=tempsense_export.csv');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(csv);
   } catch (err) {
     console.error('[DATA] CSV export error:', err);

@@ -42,16 +42,16 @@ router.get('/', authMiddleware, async (req, res) => {
 // POST /api/nodes
 router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
   try {
-    const { roomId, deviceId, name, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow } = req.body;
+    const { roomId, deviceId, name, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, notes } = req.body;
     if (!roomId || deviceId === undefined || !name) {
       return res.status(400).json({ error: 'roomId, deviceId, and name are required' });
     }
 
     const result = await pool.query(
-      `INSERT INTO nodes (room_id, device_id, name, ip_address, tcp_port, sampling_interval, temp_high, temp_low, humidity_high, humidity_low)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      `INSERT INTO nodes (room_id, device_id, name, location, ip_address, tcp_port, sampling_interval, temp_high, temp_low, humidity_high, humidity_low, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
-        roomId, deviceId, name,
+        roomId, deviceId, name, location || null,
         ipAddress || null,
         tcpPort || 8080,
         samplingInterval || 5,
@@ -59,6 +59,7 @@ router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async
         tempLow ?? 2.0,
         humidityHigh ?? 80.0,
         humidityLow ?? 20.0,
+        notes || null
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -74,24 +75,32 @@ router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async
 // PUT /api/nodes/:id
 router.put('/:id', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
   try {
-    const { name, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive } = req.body;
+    const { name, deviceId, roomId, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, notes } = req.body;
+    
     const result = await pool.query(
       `UPDATE nodes SET
         name = COALESCE($1, name),
-        ip_address = COALESCE($2, ip_address),
-        tcp_port = COALESCE($3, tcp_port),
-        sampling_interval = COALESCE($4, sampling_interval),
-        temp_high = COALESCE($5, temp_high),
-        temp_low = COALESCE($6, temp_low),
-        humidity_high = COALESCE($7, humidity_high),
-        humidity_low = COALESCE($8, humidity_low),
-        is_active = COALESCE($9, is_active)
-       WHERE id = $10 RETURNING *`,
-      [name, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, req.params.id]
+        device_id = COALESCE($2, device_id),
+        room_id = COALESCE($3, room_id),
+        location = COALESCE($4, location),
+        ip_address = COALESCE($5, ip_address),
+        tcp_port = COALESCE($6, tcp_port),
+        sampling_interval = COALESCE($7, sampling_interval),
+        temp_high = COALESCE($8, temp_high),
+        temp_low = COALESCE($9, temp_low),
+        humidity_high = COALESCE($10, humidity_high),
+        humidity_low = COALESCE($11, humidity_low),
+        is_active = COALESCE($12, is_active),
+        notes = COALESCE($13, notes)
+       WHERE id = $14 RETURNING *`,
+      [name, deviceId, roomId, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, notes, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Node not found' });
     res.json(result.rows[0]);
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Device ID already exists' });
+    }
     console.error('[NODES] Update error:', err);
     res.status(500).json({ error: 'Server error' });
   }

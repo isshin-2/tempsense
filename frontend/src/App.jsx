@@ -8,6 +8,8 @@ import RoomsPage from './pages/RoomsPage';
 import NodesPage from './pages/NodesPage';
 import ReportsPage from './pages/ReportsPage';
 import AlertsPage from './pages/AlertsPage';
+import SettingsPage from './pages/SettingsPage';
+import ScheduledReportsPage from './pages/ScheduledReportsPage';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -44,6 +46,8 @@ export default function App() {
             <Route path="/nodes" element={<NodesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/scheduled-reports" element={<ScheduledReportsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
