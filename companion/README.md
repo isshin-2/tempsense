@@ -51,20 +51,19 @@ PORT=3000
 > ⚠️ **Never commit `.env` to git** — it contains your secret token.
 > It is already listed in `.gitignore`.
 
-### 3. Install dependencies
+### 3. Run and Setup in One Click 🚀
+
+Simply double-click the `run.bat` file in this folder. It will:
+- Automatically check and install dependencies (`npm install`) if they are missing
+- Launch the companion server backend
+- Automatically open the dashboard in your default browser at **http://localhost:3000** (or the PORT configured in `.env`)
+
+Alternatively, you can run it manually:
 
 ```powershell
-cd companion
 npm install
+npm start
 ```
-
-### 4. Start the app
-
-```powershell
-node server.js
-```
-
-Open browser → **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
