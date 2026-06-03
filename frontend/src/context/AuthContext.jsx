@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getUser, getToken, login as apiLogin, logout as apiLogout } from '../services/api';
+import { login as apiLogin, logout as apiLogout, getUser, getToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -17,9 +17,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(email, password) {
-    const data = await apiLogin(email, password);
-    setUser(data.user);
-    return data;
+    const { token, user } = await apiLogin(email, password);
+    setUser(user);
+    return user;
   }
 
   function logout() {
@@ -27,8 +27,13 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  function updateUser(updatedUser) {
+    setUser(updatedUser);
+    localStorage.setItem('tempsense_user', JSON.stringify(updatedUser));
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

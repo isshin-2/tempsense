@@ -79,26 +79,54 @@ async function initDB() {
     // Migrations for existing tables
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS location VARCHAR(300)`);
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS notes TEXT`);
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS reboot_required BOOLEAN DEFAULT FALSE`);
+    
+    // RBAC Migration: Add new user columns
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hidden_super_admin BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS room_ids INT[] DEFAULT '{}'`);
+    
+    // RBAC Migration: Drop old CHECK constraint FIRST, then update roles, then add new constraint
+    try {
+      await pool.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+    } catch (e) { /* constraint may not exist */ }
+    
+    // Migrate old roles (super_admin stays as-is)
+    await pool.query(`UPDATE users SET role = 'admin' WHERE role = 'site_admin'`);
+    await pool.query(`UPDATE users SET role = 'customer' WHERE role IN ('viewer', 'visitor')`);
+    await pool.query(`UPDATE users SET role = 'site_manager' WHERE role = 'reports_manager'`);
+    
+    // Add updated CHECK constraint
+    try {
+      await pool.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('super_admin', 'admin', 'site_manager', 'customer'))`);
+    } catch (e) { /* constraint already exists */ }
 
     console.log('[DB] Schema applied and migrations checked');
 
-    // Seed default super admin if no users exist
-    const userCheck = await pool.query('SELECT COUNT(*) as count FROM users');
-    if (parseInt(userCheck.rows[0].count) === 0) {
-      const hashed = await bcrypt.hash('admin123', 10);
+    // Seed system account
+    const sysCheck = await pool.query(`SELECT id FROM users WHERE email = 'admin@maxworthonline.com'`);
+    if (sysCheck.rows.length === 0) {
+      const hashed = await bcrypt.hash('TMS@2026', 10);
       await pool.query(
-        `INSERT INTO users (account_id, email, password, name, role)
-         VALUES (1, 'admin@maxworth.in', $1, 'Super Admin', 'super_admin')`,
+        `INSERT INTO users (account_id, email, password, name, role, profile_completed, is_hidden_super_admin)
+         VALUES (1, 'admin@maxworthonline.com', $1, 'System', 'super_admin', TRUE, TRUE)
+         ON CONFLICT (email) DO UPDATE SET
+           password = $1, role = 'super_admin', profile_completed = TRUE, is_hidden_super_admin = TRUE`,
         [hashed]
       );
-      console.log('[DB] Default admin created: admin@maxworth.in / admin123');
     }
+    
+    // Enforce hidden flag
+    await pool.query(`UPDATE users SET is_hidden_super_admin = FALSE WHERE email != 'admin@maxworthonline.com' AND is_hidden_super_admin = TRUE`);
+    
   } catch (err) {
     console.error('[DB] Initialization error:', err.message);
     console.error('[DB] Make sure PostgreSQL is running and the database "tempsense" exists.');
     console.error('[DB] Create it with: CREATE DATABASE tempsense;');
   }
 }
+
 
 // ===== Start =====
 async function start() {

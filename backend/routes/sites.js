@@ -11,7 +11,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const params = [];
 
     // If site_admin or viewer, restrict to assigned sites
-    if (req.user.role === 'site_admin' || req.user.role === 'viewer') {
+    if (req.user.role === 'site_manager' || req.user.role === 'customer') {
       if (req.user.siteIds && req.user.siteIds.length > 0) {
         query += ' WHERE s.id = ANY($1)';
         params.push(req.user.siteIds);
@@ -30,7 +30,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/sites
-router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { name, location, accountId } = req.body;
     if (!name) return res.status(400).json({ error: 'Site name is required' });
@@ -47,7 +47,7 @@ router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async
 });
 
 // PUT /api/sites/:id
-router.put('/:id', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.put('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { name, location } = req.body;
     const result = await pool.query(
@@ -63,7 +63,7 @@ router.put('/:id', authMiddleware, requireRole('super_admin', 'site_admin'), asy
 });
 
 // DELETE /api/sites/:id
-router.delete('/:id', authMiddleware, requireRole('super_admin'), async (req, res) => {
+router.delete('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     await pool.query('DELETE FROM sites WHERE id = $1', [req.params.id]);
     res.json({ success: true });

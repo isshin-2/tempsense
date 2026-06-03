@@ -95,6 +95,14 @@ export async function deleteRoom(id) {
   return res.json();
 }
 
+export async function updateRoom(id, data) {
+  const res = await fetch(`${API_BASE}/rooms/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update room');
+  return res.json();
+}
+
 // ===== Nodes =====
 export async function fetchNodes(roomId, siteId) {
   let url = `${API_BASE}/nodes?`;
@@ -153,14 +161,38 @@ export async function fetchAlerts(params) {
   return res.json();
 }
 
-export function exportCSV(params) {
+export async function exportCSV(params) {
   const qs = new URLSearchParams(params).toString();
-  window.open(`${API_BASE}/data/export/csv?${qs}&token=${getToken()}`, '_blank');
+  try {
+    const res = await fetch(`${API_BASE}/data/export/csv?${qs}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tempsense_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('CSV export failed: ' + err.message);
+  }
 }
 
-export function exportPDF(params) {
+export async function exportPDF(params) {
   const qs = new URLSearchParams(params).toString();
-  window.open(`${API_BASE}/data/export/pdf?${qs}&token=${getToken()}`, '_blank');
+  try {
+    const res = await fetch(`${API_BASE}/data/export/pdf?${qs}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tempsense_report_${new Date().toISOString().split('T')[0]}.pdf`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('PDF export failed: ' + err.message);
+  }
 }
 
 // ===== Settings & SMTP =====
@@ -213,6 +245,71 @@ export async function deleteSchedule(id) {
     method: 'DELETE', headers: authHeaders(),
   });
   if (!res.ok) throw new Error('Failed to delete schedule');
+  return res.json();
+}
+
+// ===== User Management =====
+export async function fetchUsers() {
+  const res = await fetch(`${API_BASE}/auth/users`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch users');
+  return res.json();
+}
+
+export async function registerUser(data) {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to register user');
+  return json;
+}
+
+export async function updateUserRole(id, role) {
+  const res = await fetch(`${API_BASE}/auth/users/${id}/role`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ role }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to update role');
+  return json;
+}
+
+export async function deleteUser(id) {
+  const res = await fetch(`${API_BASE}/auth/users/${id}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to delete user');
+  return res.json();
+}
+
+export async function setupProfile(data) {
+  const res = await fetch(`${API_BASE}/auth/setup-profile`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Profile setup failed');
+  return json;
+}
+
+export async function updateUser(id, data) {
+  const res = await fetch(`${API_BASE}/auth/users/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to update user');
+  return json;
+}
+
+export async function fetchCompanyName() {
+  const res = await fetch(`${API_BASE}/auth/company`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch company name');
+  return res.json();
+}
+
+export async function updateCompanyName(companyName) {
+  const res = await fetch(`${API_BASE}/auth/company`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ companyName }),
+  });
+  if (!res.ok) throw new Error('Failed to update company name');
   return res.json();
 }
 

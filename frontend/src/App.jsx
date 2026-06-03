@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import LoginPage from './pages/LoginPage';
+import ProfileSetup from './pages/ProfileSetup';
 import DashboardPage from './pages/DashboardPage';
 import SitesPage from './pages/SitesPage';
 import RoomsPage from './pages/RoomsPage';
@@ -10,11 +11,14 @@ import ReportsPage from './pages/ReportsPage';
 import AlertsPage from './pages/AlertsPage';
 import SettingsPage from './pages/SettingsPage';
 import ScheduledReportsPage from './pages/ScheduledReportsPage';
+import UserManagement from './pages/UserManagement';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
+  // Force profile setup if not completed
+  if (user.profileCompleted === false) return <Navigate to="/profile-setup" replace />;
 
   return (
     <div className="app-layout">
@@ -26,10 +30,27 @@ function ProtectedLayout() {
   );
 }
 
+function ProfileSetupRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.profileCompleted !== false) return <Navigate to="/" replace />;
+  return <ProfileSetup />;
+}
+
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
+  if (user) {
+    if (user.profileCompleted === false) return <Navigate to="/profile-setup" replace />;
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') return <Navigate to="/" replace />;
   return children;
 }
 
@@ -39,6 +60,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/profile-setup" element={<ProfileSetupRoute />} />
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/sites" element={<SitesPage />} />
@@ -46,8 +68,9 @@ export default function App() {
             <Route path="/nodes" element={<NodesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
             <Route path="/scheduled-reports" element={<ScheduledReportsPage />} />
+            <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

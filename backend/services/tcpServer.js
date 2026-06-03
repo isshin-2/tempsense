@@ -74,14 +74,14 @@ function startTCPServer(port) {
  * Process a single parsed JSON payload from a sensor node.
  */
 async function processPayload(payload, remoteAddr) {
-  const { t1, t2, td, h, deviceId } = payload;
+  const { t1, t2, td, h, deviceId, rebootRequired } = payload;
 
   if (deviceId === undefined || deviceId === null) {
     console.warn(`[TCP] Payload missing deviceId from ${remoteAddr}`);
     return;
   }
 
-  console.log(`[TCP] Device ${deviceId}: t1=${t1}, t2=${t2}, td=${td}, h=${h}`);
+  console.log(`[TCP] Device ${deviceId}: t1=${t1}, t2=${t2}, td=${td}, h=${h}${rebootRequired ? ' [REBOOT REQUIRED]' : ''}`);
 
   try {
     // Look up the node by device_id
@@ -107,8 +107,11 @@ async function processPayload(payload, remoteAddr) {
       [node.id, t1 ?? null, t2 ?? null, td ?? null, h ?? null]
     );
 
-    // Update last_seen
-    await pool.query('UPDATE nodes SET last_seen = NOW() WHERE id = $1', [node.id]);
+    // Update last_seen and reboot_required
+    await pool.query(
+      'UPDATE nodes SET last_seen = NOW(), reboot_required = $1 WHERE id = $2',
+      [rebootRequired === true, node.id]
+    );
 
     // Broadcast to WebSocket clients
     if (io) {
@@ -124,6 +127,7 @@ async function processPayload(payload, remoteAddr) {
         t2: t2 ?? null,
         td: td ?? null,
         humidity: h ?? null,
+        rebootRequired: rebootRequired === true,
         timestamp: new Date().toISOString(),
       });
     }

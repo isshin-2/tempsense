@@ -1,43 +1,47 @@
 import { useState, useEffect } from 'react';
-import { fetchSites, createSite, deleteSite } from '../services/api';
-import { Building2, Plus, Trash2, MapPin } from 'lucide-react';
+import { fetchSites, createSite, updateSite, deleteSite } from '../services/api';
+import { Building2, Plus, Trash2, MapPin, Pencil } from 'lucide-react';
 
 export default function SitesPage() {
   const [sites, setSites] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: '', location: '', accountId: 1 });
 
   useEffect(() => { loadSites(); }, []);
 
   async function loadSites() {
-    try {
-      const data = await fetchSites();
-      setSites(data);
-    } catch (err) {
-      console.error('Failed to load sites:', err);
-    }
+    try { setSites(await fetchSites()); } catch (err) { console.error(err); }
   }
 
-  async function handleCreate(e) {
+  function openCreate() {
+    setEditId(null);
+    setForm({ name: '', location: '', accountId: 1 });
+    setShowModal(true);
+  }
+
+  function openEdit(site) {
+    setEditId(site.id);
+    setForm({ name: site.name, location: site.location || '' });
+    setShowModal(true);
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
     try {
-      await createSite(form);
+      if (editId) {
+        await updateSite(editId, { name: form.name, location: form.location });
+      } else {
+        await createSite(form);
+      }
       setShowModal(false);
-      setForm({ name: '', location: '', accountId: 1 });
       loadSites();
-    } catch (err) {
-      alert(err.message);
-    }
+    } catch (err) { alert(err.message); }
   }
 
   async function handleDelete(id) {
     if (!confirm('Delete this site and all its rooms/nodes?')) return;
-    try {
-      await deleteSite(id);
-      loadSites();
-    } catch (err) {
-      alert(err.message);
-    }
+    try { await deleteSite(id); loadSites(); } catch (err) { alert(err.message); }
   }
 
   return (
@@ -47,7 +51,7 @@ export default function SitesPage() {
           <h2>Sites</h2>
           <p>Manage warehouse and facility locations</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={openCreate}>
           <Plus size={16} /> Add Site
         </button>
       </div>
@@ -66,7 +70,7 @@ export default function SitesPage() {
                 <th>Location</th>
                 <th>Organization</th>
                 <th>Created</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -82,9 +86,14 @@ export default function SitesPage() {
                   <td>{s.account_name}</td>
                   <td>{new Date(s.created_at).toLocaleDateString('en-IN')}</td>
                   <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(s.id)}>
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(s)}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(s.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -96,8 +105,8 @@ export default function SitesPage() {
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Add New Site</h3>
-            <form onSubmit={handleCreate}>
+            <h3>{editId ? 'Edit Site' : 'Add New Site'}</h3>
+            <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Site Name</label>
                 <input className="form-input" placeholder="e.g. Warehouse Alpha - Chennai"
@@ -110,7 +119,7 @@ export default function SitesPage() {
               </div>
               <div className="modal-actions">
                 <button className="btn btn-ghost" type="button" onClick={() => setShowModal(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit">Create Site</button>
+                <button className="btn btn-primary" type="submit">{editId ? 'Save Changes' : 'Create Site'}</button>
               </div>
             </form>
           </div>

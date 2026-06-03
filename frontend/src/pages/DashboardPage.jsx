@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchLatest, connectSocket, disconnectSocket } from '../services/api';
+import { fetchLatest, fetchCompanyName, connectSocket, disconnectSocket } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import SensorCard from '../components/SensorCard';
-import { Activity, Thermometer, Droplets, AlertTriangle } from 'lucide-react';
+import { Activity, Thermometer, Droplets, AlertTriangle, Building2 } from 'lucide-react';
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [companyName, setCompanyName] = useState(user?.companyName || '');
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
 
@@ -39,6 +42,10 @@ export default function DashboardPage() {
       disconnectSocket();
       clearInterval(interval);
     };
+  }, []);
+
+  useEffect(() => {
+    fetchCompanyName().then(r => { if (r.companyName) setCompanyName(r.companyName); }).catch(() => {});
   }, []);
 
   async function loadData() {
@@ -78,9 +85,17 @@ export default function DashboardPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h2>Live Dashboard</h2>
-        <p>Real-time sensor readings across all sites</p>
+      <div className="page-header flex-between">
+        <div>
+          <h2>Live Dashboard</h2>
+          <p>Real-time sensor readings across all sites</p>
+        </div>
+        {companyName && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+            <Building2 size={16} style={{ color: 'var(--accent-blue)' }} />
+            {companyName}
+          </div>
+        )}
       </div>
 
       <div className="page-body">

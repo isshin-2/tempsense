@@ -10,10 +10,35 @@ router.get('/', authMiddleware, async (req, res) => {
     const { siteId } = req.query;
     let query = 'SELECT r.*, s.name as site_name FROM rooms r JOIN sites s ON r.site_id = s.id';
     const params = [];
+    const conditions = [];
 
     if (siteId) {
-      query += ' WHERE r.site_id = $1';
+      conditions.push(`r.site_id = $${params.length + 1}`);
       params.push(siteId);
+    }
+
+    // Site manager: restrict to assigned sites
+    if (req.user.role === 'site_manager') {
+      if (req.user.siteIds && req.user.siteIds.length > 0) {
+        conditions.push(`r.site_id = ANY($${params.length + 1})`);
+        params.push(req.user.siteIds);
+      } else {
+        return res.json([]);
+      }
+    }
+
+    // Customer: restrict to assigned rooms
+    if (req.user.role === 'customer') {
+      if (req.user.roomIds && req.user.roomIds.length > 0) {
+        conditions.push(`r.id = ANY($${params.length + 1})`);
+        params.push(req.user.roomIds);
+      } else {
+        return res.json([]);
+      }
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
     }
 
     query += ' ORDER BY s.name, r.name ASC';
@@ -26,7 +51,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/rooms
-router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { siteId, name } = req.body;
     if (!siteId || !name) return res.status(400).json({ error: 'siteId and name are required' });
@@ -43,7 +68,7 @@ router.post('/', authMiddleware, requireRole('super_admin', 'site_admin'), async
 });
 
 // PUT /api/rooms/:id
-router.put('/:id', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.put('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { name } = req.body;
     const result = await pool.query(
@@ -59,7 +84,7 @@ router.put('/:id', authMiddleware, requireRole('super_admin', 'site_admin'), asy
 });
 
 // DELETE /api/rooms/:id
-router.delete('/:id', authMiddleware, requireRole('super_admin'), async (req, res) => {
+router.delete('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     await pool.query('DELETE FROM rooms WHERE id = $1', [req.params.id]);
     res.json({ success: true });

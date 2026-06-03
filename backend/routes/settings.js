@@ -6,7 +6,7 @@ const nodemailer = require('nodemailer');
 const router = express.Router();
 
 // GET /api/settings/smtp
-router.get('/smtp', authMiddleware, requireRole('super_admin'), async (req, res) => {
+router.get('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const result = await pool.query('SELECT host, port, user_email, secure, sender_name FROM smtp_settings LIMIT 1');
     res.json(result.rows[0] || {});
@@ -17,7 +17,7 @@ router.get('/smtp', authMiddleware, requireRole('super_admin'), async (req, res)
 });
 
 // POST /api/settings/smtp
-router.get('/smtp/test', authMiddleware, requireRole('super_admin'), async (req, res) => {
+router.get('/smtp/test', authMiddleware, requireRole('admin'), async (req, res) => {
   // Simple test endpoint
   try {
     const result = await pool.query('SELECT * FROM smtp_settings LIMIT 1');
@@ -41,7 +41,7 @@ router.get('/smtp/test', authMiddleware, requireRole('super_admin'), async (req,
   }
 });
 
-router.post('/smtp', authMiddleware, requireRole('super_admin'), async (req, res) => {
+router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { host, port, user_email, password, secure, sender_name } = req.body;
     
@@ -69,7 +69,7 @@ router.post('/smtp', authMiddleware, requireRole('super_admin'), async (req, res
 });
 
 // Scheduled Reports
-router.get('/reports', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.get('/reports', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT sr.*, s.name as site_name 
@@ -84,7 +84,7 @@ router.get('/reports', authMiddleware, requireRole('super_admin', 'site_admin'),
   }
 });
 
-router.post('/reports', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.post('/reports', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { name, frequency, recipients, siteId, reportType, isActive } = req.body;
     const result = await pool.query(
@@ -99,7 +99,7 @@ router.post('/reports', authMiddleware, requireRole('super_admin', 'site_admin')
   }
 });
 
-router.put('/reports/:id', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.put('/reports/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { name, frequency, recipients, siteId, reportType, isActive } = req.body;
     const result = await pool.query(
@@ -120,7 +120,7 @@ router.put('/reports/:id', authMiddleware, requireRole('super_admin', 'site_admi
   }
 });
 
-router.delete('/reports/:id', authMiddleware, requireRole('super_admin', 'site_admin'), async (req, res) => {
+router.delete('/reports/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     await pool.query('DELETE FROM scheduled_reports WHERE id = $1', [req.params.id]);
     res.json({ success: true });

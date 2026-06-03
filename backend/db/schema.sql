@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   humidity_high   FLOAT DEFAULT 80.0,
   humidity_low    FLOAT DEFAULT 20.0,
   is_active       BOOLEAN DEFAULT TRUE,
+  reboot_required BOOLEAN DEFAULT FALSE,
   last_seen       TIMESTAMP,
   notes           TEXT,
   created_at      TIMESTAMP DEFAULT NOW()
@@ -54,9 +55,13 @@ CREATE TABLE IF NOT EXISTS users (
   email       VARCHAR(255) NOT NULL UNIQUE,
   password    VARCHAR(255) NOT NULL,
   name        VARCHAR(200) NOT NULL,
-  role        VARCHAR(20) NOT NULL DEFAULT 'viewer'
-              CHECK (role IN ('super_admin', 'site_admin', 'viewer')),
+  role        VARCHAR(20) NOT NULL DEFAULT 'customer'
+              CHECK (role IN ('super_admin', 'admin', 'site_manager', 'customer')),
+  phone       VARCHAR(20),
+  profile_completed BOOLEAN DEFAULT FALSE,
+  is_hidden_super_admin BOOLEAN DEFAULT FALSE,
   site_ids    INT[] DEFAULT '{}',
+  room_ids    INT[] DEFAULT '{}',
   created_at  TIMESTAMP DEFAULT NOW()
 );
 
@@ -123,6 +128,6 @@ CREATE TABLE IF NOT EXISTS email_logs (
   sent_at      TIMESTAMP DEFAULT NOW()
 );
 
--- Seed: Default account & super admin
+-- Seed: Default account
 INSERT INTO accounts (name) VALUES ('Maxworth Techserv')
   ON CONFLICT DO NOTHING;

@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
 const { generateReport } = require('../services/pdfGenerator');
 const { stringify } = require('csv-stringify/sync');
 
@@ -13,7 +13,7 @@ router.get('/latest', authMiddleware, async (req, res) => {
       SELECT DISTINCT ON (n.id)
         n.id as node_id, n.device_id, n.name as node_name,
         n.temp_high, n.temp_low, n.humidity_high, n.humidity_low,
-        n.last_seen, n.is_active,
+        n.last_seen, n.is_active, n.reboot_required as reboot_required,
         r.id as room_id, r.name as room_name,
         s.id as site_id, s.name as site_name,
         sd.t1, sd.t2, sd.td, sd.humidity, sd.recorded_at
@@ -85,7 +85,7 @@ router.get('/history', authMiddleware, async (req, res) => {
 });
 
 // GET /api/data/export/csv?siteId=&startDate=&endDate=
-router.get('/export/csv', authMiddleware, async (req, res) => {
+router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
     const { siteId, roomId, nodeId, startDate, endDate } = req.query;
     if (!siteId || !startDate || !endDate) {
@@ -151,7 +151,7 @@ router.get('/export/csv', authMiddleware, async (req, res) => {
 });
 
 // GET /api/data/export/pdf?siteId=&startDate=&endDate=
-router.get('/export/pdf', authMiddleware, async (req, res) => {
+router.get('/export/pdf', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
     const { siteId, roomId, nodeId, startDate, endDate } = req.query;
     if (!siteId || !startDate || !endDate) {

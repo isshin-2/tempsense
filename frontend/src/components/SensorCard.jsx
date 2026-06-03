@@ -3,7 +3,7 @@ export default function SensorCard({ node }) {
     node_name, room_name, site_name, device_id,
     t1, t2, td, humidity,
     temp_high, temp_low, humidity_high, humidity_low,
-    last_seen, recorded_at
+    last_seen, recorded_at, reboot_required
   } = node;
 
   function tempClass(val) {
@@ -48,6 +48,25 @@ export default function SensorCard({ node }) {
         </div>
         <span className={`status-dot ${statusClass}`} title={statusClass}></span>
       </div>
+
+      {reboot_required && (
+        <div className="reboot-required-banner" style={{
+          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#f87171',
+          padding: '8px 12px',
+          borderRadius: '8px',
+          fontSize: '12px',
+          fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          margin: '10px 0 2px 0'
+        }}>
+          <span>⚠️</span>
+          <span>Reboot Required: Cycle device power (OFF/ON)</span>
+        </div>
+      )}
 
       <div className="sensor-readings">
         <div className="reading-box">
