@@ -83,7 +83,11 @@ async function ghGetSHA(filePath) {
     const j = await r.json();
     return j.sha;
   }
-  return null;   // file does not exist yet
+  if (r.status === 404) {
+    return null;   // file does not exist yet
+  }
+  const errText = await r.text();
+  throw new Error(`GitHub API returned status ${r.status} when fetching SHA: ${errText}`);
 }
 
 async function ghPutFile(filePath, content, message) {
@@ -188,6 +192,9 @@ app.post('/api/upload', async (req, res) => {
   const version = (req.query.version || '1.0.1').trim();
 
   try {
+    if (!GITHUB_TOKEN || GITHUB_TOKEN.includes('your_token_here')) {
+      throw new Error('GITHUB_TOKEN is missing or not configured in .env file!');
+    }
     // ── 1. Read binary ──
     if (!fs.existsSync(BIN_PATH)) {
       sseLog(res, '❌ firmware.bin not found — build first!', 'error');
@@ -276,4 +283,8 @@ app.listen(PORT, () => {
   console.log(`\n🌡️  TEMPSENSE Companion running at http://localhost:${PORT}`);
   console.log(`   Repo  : ${GITHUB_REPO}  →  branch: ${GITHUB_BRANCH}`);
   console.log(`   Firmware dir: ${FIRMWARE_DIR}\n`);
+  if (!GITHUB_TOKEN || GITHUB_TOKEN.includes('your_token_here')) {
+    console.error(`⚠️  WARNING: GITHUB_TOKEN is not configured in your .env file!`);
+    console.error(`   Upload functionality will fail.\n`);
+  }
 });
