@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEMPSENSE Companion</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #080c14;
+    --surface:  #0f172a;
+    --card:     #1a2540;
+    --border:   rgba(255,255,255,0.07);
+    --gold:     #fbbf24;
+    --green:    #22c55e;
+    --cyan:     #38bdf8;
+    --red:      #ef4444;
+    --orange:   #f97316;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --radius:   14px;
+  }
+
+  html { font-size: 16px; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── Header ── */
+  header {
+    width: 100%;
+    background: linear-gradient(180deg, rgba(15,23,42,0.98) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--gold), var(--green));
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--gold), var(--green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  header p {
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.2);
+    font-size: 12px;
+    color: var(--green);
+    margin-left: 12px;
+  }
+  .status-pill .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Main layout ── */
+  main {
+    width: 100%;
+    max-width: 960px;
+    padding: 32px 20px 60px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .card-full { grid-column: 1 / -1; }
+
+  .card h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card h2 .icon { font-size: 16px; }
+
+  /* ── Info rows ── */
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .info-row .key { color: var(--muted); }
+  .info-row .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--cyan);
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .info-row .val.green { color: var(--green); }
+  .info-row .val.red   { color: var(--red); }
+
+  /* ── Version input ── */
+  .ver-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .ver-row label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .ver-row input {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    transition: border-color .2s;
+  }
+  .ver-row input:focus { outline: none; border-color: var(--green); }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: filter .2s, transform .15s;
+    width: 100%;
+    font-family: 'Inter', sans-serif;
+  }
+  .btn:hover  { filter: brightness(1.12); }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; transform: none; }
+
+  .btn-build {
+    background: linear-gradient(90deg, #2563eb, #1d4ed8);
+    color: #fff;
+  }
+  .btn-upload {
+    background: linear-gradient(90deg, var(--green), #16a34a);
+    color: #fff;
+  }
+  .btn-both {
+    background: linear-gradient(90deg, var(--gold), #d97706);
+    color: #000;
+  }
+
+  /* ── Log terminal ── */
+  .terminal {
+    background: #050810;
+    border: 1px solid rgba(56,189,248,0.15);
+    border-radius: 10px;
+    padding: 16px;
+    height: 340px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #94a3b8;
+    scroll-behavior: smooth;
+  }
+  .terminal::-webkit-scrollbar { width: 5px; }
+  .terminal::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
+
+  .log-log     { color: #94a3b8; }
+  .log-warn    { color: var(--orange); }
+  .log-error   { color: var(--red); }
+  .log-success { color: var(--green); font-weight: 600; }
+  .log-info    { color: var(--cyan); }
+  .log-empty   { color: #334155; font-style: italic; }
+
+  /* ── Progress bar ── */
+  .progress-wrap {
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+    display: none;
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--cyan), var(--green));
+    border-radius: 2px;
+    transition: width 0.3s;
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0%   { filter: brightness(1); }
+    50%  { filter: brightness(1.3); }
+    100% { filter: brightness(1); }
+  }
+
+  /* ── Steps ── */
+  .steps {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 7px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: var(--surface);
+    transition: all .3s;
+  }
+  .step.active  { border-color: var(--cyan);  color: var(--cyan);  background: rgba(56,189,248,0.08); }
+  .step.done    { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.08); }
+  .step.failed  { border-color: var(--red);   color: var(--red);   background: rgba(239,68,68,0.08); }
+  .step-arrow   { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌡️</div>
+  <h1>TEMPSENSE Companion</h1>
+  <p>OTA Build &amp; Deploy Tool</p>
+  <div class="status-pill" id="conn-pill">
+    <span class="dot"></span>
+    <span id="conn-text">Connecting...</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Repo Info ── -->
+  <div class="card">
+    <h2><span class="icon">🔗</span> Repository Info</h2>
+    <div class="info-row"><span class="key">Repo</span><span class="val" id="info-repo">—</span></div>
+    <div class="info-row"><span class="key">OTA Branch</span><span class="val" id="info-branch">—</span></div>
+    <div class="info-row"><span class="key">Firmware Dir</span><span class="val" id="info-dir">—</span></div>
+  </div>
+
+  <!-- ── Binary Status ── -->
+  <div class="card">
+    <h2><span class="icon">📦</span> Binary Status</h2>
+    <div class="info-row">
+      <span class="key">firmware.bin</span>
+      <span class="val" id="bin-exists">Checking...</span>
+    </div>
+    <div class="info-row"><span class="key">Size</span><span class="val" id="bin-size">—</span></div>
+    <div class="info-row"><span class="key">Last Build</span><span class="val" id="bin-mtime">—</span></div>
+  </div>
+
+  <!-- ── Controls ── -->
+  <div class="card card-full">
+    <h2><span class="icon">⚙️</span> Build &amp; Deploy</h2>
+
+    <div class="ver-row">
+      <label for="ver-input">Version tag:</label>
+      <input type="text" id="ver-input" value="1.0.1" placeholder="e.g. 1.0.2" maxlength="20">
+    </div>
+
+    <div class="steps" id="steps">
+      <div class="step" id="step-build">🔨 Build</div>
+      <span class="step-arrow">›</span>
+      <div class="step" id="step-upload">⬆️ Upload</div>
+      <span class="step-arrow">›</span>
+      <div class="step" id="step-done">✅ Live</div>
+    </div>
+
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <button class="btn btn-build" id="btn-build" onclick="runBuild()">
+        🔨 Build Only
+      </button>
+      <button class="btn btn-upload" id="btn-upload" onclick="runUpload()">
+        ⬆️ Upload Only
+      </button>
+      <button class="btn btn-both" id="btn-both" onclick="runBoth()">
+        🚀 Build &amp; Upload
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Terminal Log ── -->
+  <div class="card card-full">
+    <h2><span class="icon">🖥️</span> Build Log</h2>
+    <div class="terminal" id="log">
+      <span class="log-empty">Waiting for a build or upload action...</span>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── State ───────────────────────────────────────────────────────────────────────
+let busy = false;
+
+// ── Startup ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadStatus();
+  setInterval(loadStatus, 8000);
+});
+
+async function loadStatus() {
+  try {
+    const d = await fetch('/api/status').then(r => r.json());
+    document.getElementById('conn-pill').style.background = 'rgba(34,197,94,0.1)';
+    document.getElementById('conn-text').textContent = 'Connected';
+
+    document.getElementById('info-repo').textContent   = d.repo;
+    document.getElementById('info-branch').textContent = d.branch;
+
+    // Trim long path
+    let dir = d.firmwareDir;
+    if (dir.length > 38) dir = '...' + dir.slice(-38);
+    document.getElementById('info-dir').textContent = dir;
+
+    const ex = document.getElementById('bin-exists');
+    ex.textContent  = d.binExists ? 'Ready ✓' : 'Not built';
+    ex.className    = 'val ' + (d.binExists ? 'green' : 'red');
+
+    document.getElementById('bin-size').textContent =
+      d.binExists ? (d.binSize / 1024).toFixed(1) + ' KB' : '—';
+    document.getElementById('bin-mtime').textContent =
+      d.binMtime ? new Date(d.binMtime).toLocaleString() : '—';
+  } catch(e) {
+    document.getElementById('conn-text').textContent = 'Offline';
+  }
+}
+
+// ── Logging ─────────────────────────────────────────────────────────────────────
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+}
+
+function appendLog(msg, type = 'log') {
+  const el  = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-' + type;
+  div.textContent = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Step state ──────────────────────────────────────────────────────────────────
+function stepReset() {
+  ['step-build','step-upload','step-done'].forEach(id => {
+    document.getElementById(id).className = 'step';
+  });
+}
+
+function stepSet(id, state) {
+  document.getElementById(id).className = 'step ' + state;
+}
+
+// ── Button lock ──────────────────────────────────────────────────────────────────
+function lockBtns(lock) {
+  busy = lock;
+  ['btn-build','btn-upload','btn-both'].forEach(id => {
+    document.getElementById(id).disabled = lock;
+  });
+  const pw = document.getElementById('progress-wrap');
+  const pb = document.getElementById('progress-bar');
+  if (lock) {
+    pw.style.display = 'block';
+    let w = 0;
+    pb._interval = setInterval(() => {
+      w = Math.min(w + (Math.random() * 2), 90);
+      pb.style.width = w + '%';
+    }, 400);
+  } else {
+    clearInterval(pb._interval);
+    pb.style.width = '100%';
+    setTimeout(() => {
+      pw.style.display = 'none';
+      pb.style.width = '0%';
+    }, 600);
+  }
+}
+
+// ── SSE consumer ────────────────────────────────────────────────────────────────
+function consumeSSE(url, onDone) {
+  const es = new EventSource(url);
+  let failed = false;
+
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'done') {
+      failed = d.code !== 0;
+      es.close();
+      onDone(!failed);
+    } else {
+      appendLog(d.msg, d.type || 'log');
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    onDone(false);
+  };
+}
+
+// ── Build ────────────────────────────────────────────────────────────────────────
+function runBuild() {
+  if (busy) return;
+  clearLog();
+  stepReset();
+  lockBtns(true);
+  stepSet('step-build', 'active');
+  appendLog('🔨 Starting build...', 'info');
+
+  consumeSSE('/api/build', (ok) => {
+    stepSet('step-build', ok ? 'done' : 'failed');
+    lockBtns(false);
+    loadStatus();
+    if (!ok) appendLog('Build failed. Check the log above.', 'error');
+  });
+}
+
+// ── Upload ───────────────────────────────────────────────────────────────────────
+function runUpload() {
+  if (busy) return;
+  const ver = document.getElementById('ver-input').value.trim();
+  if (!ver) { alert('Please enter a version number.'); return; }
+  clearLog();
+  stepReset();
+  lockBtns(true);
+  stepSet('step-upload', 'active');
+  appendLog('⬆️  Uploading to GitHub...', 'info');
+
+  consumeSSE(`/api/upload?version=${encodeURIComponent(ver)}`, (ok) => {
+    stepSet('step-upload', ok ? 'done' : 'failed');
+    if (ok) stepSet('step-done', 'done');
+    lockBtns(false);
+    if (!ok) appendLog('Upload failed. Check the log above.', 'error');
+  });
+}
+
+// ── Build then Upload ─────────────────────────────────────────────────────────────
+function runBoth() {
+  if (busy) return;
+  const ver = document.getElementById('ver-input').value.trim();
+  if (!ver) { alert('Please enter a version number.'); return; }
+  clearLog();
+  stepReset();
+  lockBtns(true);
+  stepSet('step-build', 'active');
+  appendLog('🚀 Build & Upload pipeline starting...', 'info');
+
+  consumeSSE('/api/build', (buildOk) => {
+    stepSet('step-build', buildOk ? 'done' : 'failed');
+    if (!buildOk) {
+      appendLog('Build failed — upload skipped.', 'error');
+      lockBtns(false);
+      return;
+    }
+    // Chain upload
+    appendLog('', 'log');
+    appendLog('─────────────────────────────', 'info');
+    appendLog('⬆️  Build done — starting upload...', 'info');
+    stepSet('step-upload', 'active');
+    loadStatus();
+
+    consumeSSE(`/api/upload?version=${encodeURIComponent(ver)}`, (uploadOk) => {
+      stepSet('step-upload', uploadOk ? 'done' : 'failed');
+      if (uploadOk) stepSet('step-done', 'done');
+      lockBtns(false);
+      loadStatus();
+      if (!uploadOk) appendLog('Upload failed. Check the log above.', 'error');
+    });
+  });
+}
+</script>
+</body>
+</html>
