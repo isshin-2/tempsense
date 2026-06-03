@@ -182,8 +182,8 @@ app.get('/api/build', (req, res) => {
   req.on('close', () => pio.kill());
 });
 
-// ─── POST /api/upload  –  push binary + version.json to GitHub ─────────────────
-app.post('/api/upload', async (req, res) => {
+// ─── GET /api/upload  –  push binary + version.json to GitHub ─────────────────
+app.get('/api/upload', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
