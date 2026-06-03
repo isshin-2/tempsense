@@ -182,6 +182,50 @@ app.get('/api/build', (req, res) => {
   req.on('close', () => pio.kill());
 });
 
+// ─── GET /api/upload-local  –  run pio run --target upload, stream log via SSE ──
+app.get('/api/upload-local', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  sseLog(res, `🔌 Starting local USB flash…`);
+  sseLog(res, `📁 Project: ${FIRMWARE_DIR}`);
+
+  if (!PIO_CMD) {
+    sseLog(res, '⚠️  "pio" not found in PATH — trying "python -m platformio"…', 'warn');
+  } else {
+    sseLog(res, `🔧 PlatformIO: ${PIO_CMD}`);
+  }
+
+  const args = PIO_CMD
+    ? [PIO_CMD, ['run', '--target', 'upload', '--project-dir', FIRMWARE_DIR], { shell: true, env: { ...process.env } }]
+    : [PYTHON_CMD, ['-m', 'platformio', 'run', '--target', 'upload', '--project-dir', FIRMWARE_DIR], { shell: true, env: { ...process.env } }];
+
+  const pio = spawn(...args);
+
+  pio.stdout.on('data', d => {
+    const lines = d.toString().split('\n');
+    lines.forEach(l => { if (l.trim()) sseLog(res, l); });
+  });
+  pio.stderr.on('data', d => {
+    const lines = d.toString().split('\n');
+    lines.forEach(l => { if (l.trim()) sseLog(res, l, 'warn'); });
+  });
+
+  pio.on('close', code => {
+    if (code === 0) {
+      sseLog(res, `✅ Local flash SUCCESS — Node is running new firmware`, 'success');
+    } else {
+      sseLog(res, `❌ Local flash FAILED (exit ${code})`, 'error');
+    }
+    res.write('data: {"type":"done","code":' + code + '}\n\n');
+    res.end();
+  });
+
+  req.on('close', () => pio.kill());
+});
+
 // ─── GET /api/upload  –  push binary + version.json to GitHub ─────────────────
 app.get('/api/upload', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');

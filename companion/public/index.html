@@ -323,7 +323,9 @@
     <div class="steps" id="steps">
       <div class="step" id="step-build">🔨 Build</div>
       <span class="step-arrow">›</span>
-      <div class="step" id="step-upload">⬆️ Upload</div>
+      <div class="step" id="step-upload">☁️ GitHub Upload</div>
+      <span class="step-arrow">›</span>
+      <div class="step" id="step-local">🔌 USB Flash</div>
       <span class="step-arrow">›</span>
       <div class="step" id="step-done">✅ Live</div>
     </div>
@@ -332,7 +334,7 @@
       <div class="progress-bar" id="progress-bar"></div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr;gap:10px">
       <button class="btn btn-build" id="btn-build" onclick="runBuild()">
         🔨 Build Only
       </button>
@@ -341,6 +343,9 @@
       </button>
       <button class="btn btn-both" id="btn-both" onclick="runBoth()">
         🚀 Build &amp; Upload
+      </button>
+      <button class="btn" id="btn-local" onclick="runLocalFlash()" style="background: linear-gradient(90deg, #8b5cf6, #6d28d9); color: #fff;">
+        🔌 USB Flash
       </button>
     </div>
   </div>
@@ -408,7 +413,7 @@ function appendLog(msg, type = 'log') {
 
 // ── Step state ──────────────────────────────────────────────────────────────────
 function stepReset() {
-  ['step-build','step-upload','step-done'].forEach(id => {
+  ['step-build','step-upload','step-local','step-done'].forEach(id => {
     document.getElementById(id).className = 'step';
   });
 }
@@ -420,7 +425,7 @@ function stepSet(id, state) {
 // ── Button lock ──────────────────────────────────────────────────────────────────
 function lockBtns(lock) {
   busy = lock;
-  ['btn-build','btn-upload','btn-both'].forEach(id => {
+  ['btn-build','btn-upload','btn-both','btn-local'].forEach(id => {
     document.getElementById(id).disabled = lock;
   });
   const pw = document.getElementById('progress-wrap');
@@ -530,6 +535,39 @@ function runBoth() {
       lockBtns(false);
       loadStatus();
       if (!uploadOk) appendLog('Upload failed. Check the log above.', 'error');
+    });
+  });
+}
+
+// ── Build then USB Flash ─────────────────────────────────────────────────────────
+function runLocalFlash() {
+  if (busy) return;
+  clearLog();
+  stepReset();
+  lockBtns(true);
+  stepSet('step-build', 'active');
+  appendLog('🔌 Starting local build & flash process...', 'info');
+
+  consumeSSE('/api/build', (buildOk) => {
+    stepSet('step-build', buildOk ? 'done' : 'failed');
+    if (!buildOk) {
+      appendLog('Build failed — USB flash skipped.', 'error');
+      lockBtns(false);
+      return;
+    }
+    
+    appendLog('', 'log');
+    appendLog('─────────────────────────────', 'info');
+    appendLog('🔌 Build done — starting local USB upload...', 'info');
+    stepSet('step-local', 'active');
+    loadStatus();
+
+    consumeSSE('/api/upload-local', (uploadOk) => {
+      stepSet('step-local', uploadOk ? 'done' : 'failed');
+      if (uploadOk) stepSet('step-done', 'done');
+      lockBtns(false);
+      loadStatus();
+      if (!uploadOk) appendLog('Local USB flash failed. Ensure the board is connected via USB.', 'error');
     });
   });
 }
