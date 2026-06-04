@@ -135,6 +135,20 @@ async function start() {
   // Start Report Scheduler
   startReportScheduler();
 
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n[ERROR] Port ${PORT} is already in use!`);
+      console.error(`[TIP]   Another instance of TEMPSENSE may be running.`);
+      console.error(`[TIP]   To fix this, either:`);
+      console.error(`        1. Stop the other instance`);
+      console.error(`        2. Run: npx kill-port ${PORT}`);
+      console.error(`        3. Change PORT in .env file\n`);
+      process.exit(1);
+    } else {
+      throw err;
+    }
+  });
+
   server.listen(PORT, () => {
     console.log(`\n====================================`);
     console.log(`  TEMPSENSE Server`);

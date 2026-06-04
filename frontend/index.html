@@ -3,11 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Tempsense - Cold Chain IoT Monitoring Platform by Maxworth Techserv" />
-    <title>Tempsense — Cold Chain Monitoring</title>
+    <meta name="description" content="TEMPSENSE - Cold Chain IoT Monitoring Platform by Maxworth Techserv. Real-time temperature & humidity monitoring." />
+    <meta name="theme-color" content="#0a0e1a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>TEMPSENSE — Cold Chain Monitoring</title>
+    <style>
+      /* Pre-React loading state so the user never sees a white flash */
+      body { margin: 0; background: #0a0e1a; }
+      #pre-loader {
+        position: fixed; inset: 0; background: #0a0e1a;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        z-index: 99999; transition: opacity 0.4s ease;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
+      #pre-loader.hidden { opacity: 0; pointer-events: none; }
+      #pre-loader svg { animation: pulse 2s ease-in-out infinite; margin-bottom: 20px; }
+      #pre-loader h1 {
+        font-size: 24px; font-weight: 800; letter-spacing: -0.5px;
+        background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      #pre-loader p { color: #64748b; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+      @keyframes pulse { 0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.7} }
+    </style>
   </head>
   <body>
+    <!-- Pre-React branded loader (disappears when React mounts) -->
+    <div id="pre-loader">
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>
+      </svg>
+      <h1>TEMPSENSE</h1>
+      <p>Loading platform...</p>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Hide pre-loader once React has rendered
+      window.addEventListener('DOMContentLoaded', () => {
+        const observer = new MutationObserver(() => {
+          const root = document.getElementById('root');
+          if (root && root.children.length > 0) {
+            const loader = document.getElementById('pre-loader');
+            if (loader) {
+              loader.classList.add('hidden');
+              setTimeout(() => loader.remove(), 500);
+            }
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.getElementById('root'), { childList: true });
+      });
+    </script>
   </body>
 </html>

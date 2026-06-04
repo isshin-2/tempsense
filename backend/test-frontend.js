@@ -320,6 +320,7 @@ async function runTests() {
     console.log('\n═══ GROUP C: ROLE-BASED ACCESS ═══');
 
     // Create test users via API
+    // We update them directly to set profile_completed = TRUE so we don't have to navigate through the setup UI
     const smReg = await fetch(`${API_URL}/auth/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
       body: JSON.stringify({ name: 'E2E SM', email: `e2e_sm_${Date.now()}@test.com`, password: 'Test@123', role: 'site_manager', siteIds: [] }),
@@ -331,6 +332,9 @@ async function runTests() {
       body: JSON.stringify({ name: 'E2E Cust', email: `e2e_cust_${Date.now()}@test.com`, password: 'Test@123', role: 'customer', roomIds: [] }),
     });
     const custData = await custReg.json();
+
+    // Mark them as profile_completed = true directly via DB or API (we can use update user API if we add it, but our test token is super admin).
+    // Actually, we'll just navigate to profile-setup and complete it for them!
 
     // C1: Site Manager view
     console.log('\n--- C1. Site Manager View ---');
@@ -347,7 +351,16 @@ async function runTests() {
       localStorage.setItem('tempsense_user', JSON.stringify(u));
     }, smLoginData.token, smLoginData.user);
     await smPage.goto(BASE_URL, { waitUntil: 'networkidle2' });
-    await sleep(1500);
+    
+    // Check if on profile-setup, then complete it
+    let smUrl = smPage.url();
+    if (smUrl.includes('/profile-setup')) {
+      await setInput(smPage, 'input[placeholder*="Company" i]', 'Maxworth Techserv');
+      await setInput(smPage, 'input[type="tel"]', '1234567890');
+      await smPage.click('button[type="submit"]');
+      await sleep(2000);
+    }
+    
     await ss(smPage, '13_sm_dashboard');
 
     const smBody = await smPage.evaluate(() => document.body.innerText);
@@ -362,6 +375,7 @@ async function runTests() {
     await smPage.goto(`${BASE_URL}/users`, { waitUntil: 'networkidle2' });
     await sleep(1000);
     const smUsersUrl = smPage.url();
+    // They are not allowed on /users, so they will be redirected to / (Dashboard)
     log('SM: /users redirected', !smUsersUrl.includes('/users'), `URL: ${smUsersUrl}`);
 
     await smPage.close();
@@ -381,7 +395,16 @@ async function runTests() {
       localStorage.setItem('tempsense_user', JSON.stringify(u));
     }, custLoginData.token, custLoginData.user);
     await custPage.goto(BASE_URL, { waitUntil: 'networkidle2' });
-    await sleep(1500);
+    
+    // Check if on profile-setup, then complete it
+    let custUrl = custPage.url();
+    if (custUrl.includes('/profile-setup')) {
+      await setInput(custPage, 'input[placeholder*="Company" i]', 'Maxworth Techserv');
+      await setInput(custPage, 'input[type="tel"]', '1234567890');
+      await custPage.click('button[type="submit"]');
+      await sleep(2000);
+    }
+    
     await ss(custPage, '14_cust_dashboard');
 
     const custBody = await custPage.evaluate(() => document.body.innerText);

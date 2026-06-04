@@ -8,12 +8,33 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = getToken();
-    const saved = getUser();
-    if (token && saved) {
-      setUser(saved);
+    async function initAuth() {
+      const token = getToken();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const url = (import.meta.env.VITE_API_URL || '') + '/api/auth/me';
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+          localStorage.setItem('tempsense_user', JSON.stringify(data.user));
+        } else {
+          // Token is invalid/expired
+          localStorage.removeItem('tempsense_token');
+          localStorage.removeItem('tempsense_user');
+          setUser(null);
+        }
+      } catch (err) {
+        // Network error, fallback to saved user
+        const saved = getUser();
+        if (saved) setUser(saved);
+      }
+      setLoading(false);
     }
-    setLoading(false);
+    initAuth();
   }, []);
 
   async function login(email, password) {

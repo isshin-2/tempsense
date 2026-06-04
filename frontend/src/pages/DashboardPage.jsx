@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchLatest, fetchCompanyName, connectSocket, disconnectSocket } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import SensorCard from '../components/SensorCard';
+import GettingStarted from '../components/GettingStarted';
 import { Activity, Thermometer, Droplets, AlertTriangle, Building2 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -135,11 +136,7 @@ export default function DashboardPage() {
             Loading sensors...
           </div>
         ) : nodes.length === 0 ? (
-          <div className="text-center mt-24" style={{ color: 'var(--text-muted)' }}>
-            <Thermometer size={48} style={{ marginBottom: '12px', opacity: 0.3 }} />
-            <p>No sensor nodes configured yet.</p>
-            <p style={{ fontSize: '13px', marginTop: '8px' }}>Add a Site → Room → Node to get started.</p>
-          </div>
+          <GettingStarted />
         ) : (
           Object.entries(grouped).map(([siteName, rooms]) => (
             <div key={siteName} className="site-section">
