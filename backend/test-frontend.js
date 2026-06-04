@@ -355,7 +355,7 @@ async function runTests() {
     // Check if on profile-setup, then complete it
     let smUrl = smPage.url();
     if (smUrl.includes('/profile-setup')) {
-      await setInput(smPage, 'input[placeholder*="Company" i]', 'Maxworth Techserv');
+      await setInput(smPage, 'input[placeholder*="Maxworth" i]', 'Maxworth Techserv');
       await setInput(smPage, 'input[type="tel"]', '1234567890');
       await smPage.click('button[type="submit"]');
       await sleep(2000);
@@ -399,7 +399,7 @@ async function runTests() {
     // Check if on profile-setup, then complete it
     let custUrl = custPage.url();
     if (custUrl.includes('/profile-setup')) {
-      await setInput(custPage, 'input[placeholder*="Company" i]', 'Maxworth Techserv');
+      await setInput(custPage, 'input[placeholder*="Maxworth" i]', 'Maxworth Techserv');
       await setInput(custPage, 'input[type="tel"]', '1234567890');
       await custPage.click('button[type="submit"]');
       await sleep(2000);

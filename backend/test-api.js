@@ -307,30 +307,36 @@ async function runTests() {
     `Nodes with data: ${latestData.data?.length || 0}`);
 
   // Test export with auth header
-  const csvExport = await fetch(`${BASE}/data/export/csv?range=24h`, {
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const startDate = yesterday.toISOString().split('T')[0] + 'T00:00:00.000Z';
+  const endDate = today.toISOString().split('T')[0] + 'T23:59:59.999Z';
+  const siteId = createdSiteId || 1;
+
+  const csvExport = await fetch(`${BASE}/data/export/csv?siteId=${siteId}&startDate=${startDate}&endDate=${endDate}`, {
     headers: { 'Authorization': `Bearer ${adminToken}` }
   });
   log('GET /data/export/csv (header auth)', csvExport.ok || csvExport.status === 200,
     `Status=${csvExport.status}`);
 
   // Test export with query token (fallback)
-  const csvExportQ = await fetch(`${BASE}/data/export/csv?range=24h&token=${adminToken}`);
+  const csvExportQ = await fetch(`${BASE}/data/export/csv?siteId=${siteId}&startDate=${startDate}&endDate=${endDate}&token=${adminToken}`);
   log('GET /data/export/csv (query token)', csvExportQ.ok || csvExportQ.status === 200,
     `Status=${csvExportQ.status}`);
 
   // ===== 11. SETTINGS =====
   console.log('\n--- 11. Settings ---');
   
-  const settings = await request('GET', '/settings', null, adminToken);
-  log('GET /settings', settings.ok,
+  const settings = await request('GET', '/settings/smtp', null, adminToken);
+  log('GET /settings/smtp', settings.ok,
     settings.ok ? `Keys: ${Object.keys(settings.data).join(', ')}` : `FAILED: ${JSON.stringify(settings.data)}`);
 
   // ===== 12. ALERTS =====
   console.log('\n--- 12. Alerts ---');
   
-  const alerts = await request('GET', '/alerts', null, adminToken);
-  log('GET /alerts', alerts.ok,
-    `Alerts count: ${Array.isArray(alerts.data) ? alerts.data.length : 'N/A'}`);
+  const alerts = await request('GET', '/data/alerts', null, adminToken);
+  log('GET /alerts', alerts.ok && Array.isArray(alerts.data),
+    alerts.ok ? `Alerts count: ${Array.isArray(alerts.data) ? alerts.data.length : 'N/A'}` : `FAILED: ${JSON.stringify(alerts.data)}`);
 
   // ===== 13. SYSTEM ADMIN PROTECTION =====
   console.log('\n--- 13. System Admin Protection ---');
