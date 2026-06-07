@@ -220,9 +220,13 @@ function decryptSMTPPassword(passphrase) {
 }
 
 function askDecryptionKey() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (process.env.SMTP_DECRYPTION_KEY) {
       resolve(process.env.SMTP_DECRYPTION_KEY);
+      return;
+    }
+    if (!process.stdin.isTTY) {
+      reject(new Error('Terminal is non-interactive and SMTP_DECRYPTION_KEY environment variable is not set.'));
       return;
     }
     const rl = readline.createInterface({
@@ -239,21 +243,26 @@ function askDecryptionKey() {
 async function initializeSMTPKey() {
   let attempts = 0;
   while (attempts < 3) {
-    const rawKey = await askDecryptionKey();
-    
-    // First, decode the user's key with Caesar cipher (shift 28)
-    const decodedKey = decodeCaesar(rawKey, 28);
-    
-    // Then, use the decoded key ("Verdex-Kappa") for AES-256 decryption
-    const decrypted = decryptSMTPPassword(decodedKey);
-    if (decrypted === 'kqqt sqsq exfk ljdx') {
-      process.env.DECRYPTED_SMTP_PASS = decrypted;
-      console.log('[SMTP] Decryption key accepted. Default SMTP enabled.');
-      return true;
-    }
-    console.error(`[SMTP] Invalid decryption key. (${2 - attempts} attempts remaining)`);
-    attempts++;
-    if (process.env.SMTP_DECRYPTION_KEY) {
+    try {
+      const rawKey = await askDecryptionKey();
+      
+      // First, decode the user's key with Caesar cipher (shift 28)
+      const decodedKey = decodeCaesar(rawKey, 28);
+      
+      // Then, use the decoded key ("Verdex-Kappa") for AES-256 decryption
+      const decrypted = decryptSMTPPassword(decodedKey);
+      if (decrypted === 'kqqt sqsq exfk ljdx') {
+        process.env.DECRYPTED_SMTP_PASS = decrypted;
+        console.log('[SMTP] Decryption key accepted. Default SMTP enabled.');
+        return true;
+      }
+      console.error(`[SMTP] Invalid decryption key. (${2 - attempts} attempts remaining)`);
+      attempts++;
+      if (process.env.SMTP_DECRYPTION_KEY) {
+        break;
+      }
+    } catch (err) {
+      console.error(`[SMTP] ${err.message}`);
       break;
     }
   }

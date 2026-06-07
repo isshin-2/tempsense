@@ -28,7 +28,18 @@ export async function login(email, password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  const data = await res.json();
+  
+  let data;
+  try {
+    const text = await res.text();
+    data = text ? JSON.parse(text) : {};
+  } catch (err) {
+    if (!res.ok) {
+      throw new Error(`Server connection error (Status ${res.status}). Please verify the backend is running.`);
+    }
+    throw new Error('Invalid response from server. Please try again.');
+  }
+
   if (!res.ok) throw new Error(data.error || 'Login failed');
   localStorage.setItem('tempsense_token', data.token);
   localStorage.setItem('tempsense_user', JSON.stringify(data.user));
