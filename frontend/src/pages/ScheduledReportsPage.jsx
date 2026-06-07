@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { fetchSchedules, createSchedule, updateSchedule, deleteSchedule, fetchSites } from '../services/api';
-import { Calendar, Plus, Trash2, Edit2, FileText, Loader2, Mail, Clock } from 'lucide-react';
+import { fetchSchedules, createSchedule, updateSchedule, deleteSchedule, fetchSites, testSchedule } from '../services/api';
+import { Calendar, Plus, Trash2, Edit2, FileText, Loader2, Mail, Clock, Send } from 'lucide-react';
 
 export default function ScheduledReportsPage() {
   const [schedules, setSchedules] = useState([]);
@@ -8,10 +8,24 @@ export default function ScheduledReportsPage() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+  const [testingIds, setTestingIds] = useState({});
 
   const [form, setForm] = useState({
     name: '', frequency: 'daily', recipients: '', siteId: '', reportType: 'pdf', isActive: true
   });
+
+  async function handleTestReport(id, name) {
+    setTestingIds(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await testSchedule(id);
+      alert(res.message || `Test report for "${name}" sent successfully!`);
+      loadSchedules();
+    } catch (err) {
+      alert(`Test report failed: ${err.message}`);
+    } finally {
+      setTestingIds(prev => ({ ...prev, [id]: false }));
+    }
+  }
 
   useEffect(() => {
     loadSchedules();
@@ -88,9 +102,14 @@ export default function ScheduledReportsPage() {
             {schedules.map(s => (
               <div key={s.id} className="card relative">
                 <div className="flex-between mb-16">
-                  <span className={`badge badge-${s.is_active ? 'success' : 'ghost'}`}>
-                    {s.is_active ? 'Active' : 'Paused'}
-                  </span>
+                  <div className="flex gap-8">
+                    <span className={`badge badge-${s.is_active ? 'success' : 'ghost'}`}>
+                      {s.is_active ? 'Active' : 'Paused'}
+                    </span>
+                    <span className="badge badge-info" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '11px' }}>
+                      {s.report_type === 'both' ? 'PDF + CSV' : s.report_type?.toUpperCase()}
+                    </span>
+                  </div>
                   <div className="flex gap-8">
                     <button className="btn btn-ghost btn-sm p-4" onClick={() => handleEdit(s)}><Edit2 size={14} /></button>
                     <button className="btn btn-ghost btn-sm p-4 text-danger" onClick={() => handleDelete(s.id)}><Trash2 size={14} /></button>
@@ -106,8 +125,13 @@ export default function ScheduledReportsPage() {
                 <div className="flex items-center gap-2 text-sm text-muted mb-16">
                   <Mail size={14} /> <span className="truncate">To: {s.recipients}</span>
                 </div>
-                <div className="text-xs text-muted">
-                  Last run: {s.last_run ? new Date(s.last_run).toLocaleString() : 'Never'}
+                <div className="flex-between text-xs text-muted" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', alignItems: 'center' }}>
+                  <span>Last run: {s.last_run ? new Date(s.last_run).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Never'}</span>
+                  <button className="btn btn-ghost btn-sm text-primary" style={{ height: 'auto', padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => handleTestReport(s.id, s.name)} disabled={testingIds[s.id]}>
+                    {testingIds[s.id] ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
+                    {testingIds[s.id] ? 'Sending...' : 'Test Run'}
+                  </button>
                 </div>
               </div>
             ))}

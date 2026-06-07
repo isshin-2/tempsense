@@ -16,6 +16,7 @@ import AlertsPage from './pages/AlertsPage';
 import SettingsPage from './pages/SettingsPage';
 import ScheduledReportsPage from './pages/ScheduledReportsPage';
 import UserManagement from './pages/UserManagement';
+import AcceptInvitePage from './pages/AcceptInvitePage';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -67,6 +68,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+            <Route path="/accept-invite" element={<PublicRoute><AcceptInvitePage /></PublicRoute>} />
             <Route path="/profile-setup" element={<ProfileSetupRoute />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<DashboardPage />} />

@@ -1,9 +1,26 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const os = require('os');
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { sendEmail } = require('../services/emailService');
 require('dotenv').config();
+
+function getServerIP() {
+  const interfaces = os.networkInterfaces();
+  for (const devName in interfaces) {
+    const face = interfaces[devName];
+    for (let i = 0; i < face.length; i++) {
+      const alias = face[i];
+      if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+        return alias.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET || 'tempsense_dev_secret';
@@ -100,25 +117,92 @@ router.get('/me', authMiddleware, async (req, res) => {
 router.post('/register', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { email, password, name, role, accountId, siteIds, roomIds } = req.body;
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'email, password, and name are required' });
+    if (!email || !name) {
+      return res.status(400).json({ error: 'email and name are required' });
     }
 
     const validRoles = ['admin', 'site_manager', 'customer'];
     const assignRole = validRoles.includes(role) ? role : 'customer';
 
-    const hashed = await bcrypt.hash(password, 10);
+    // If password not provided, generate a secure random password hash
+    const finalPassword = password || crypto.randomBytes(32).toString('hex');
+    const hashed = await bcrypt.hash(finalPassword, 10);
     const result = await pool.query(
       'INSERT INTO users (account_id, email, password, name, role, site_ids, room_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, name, role, site_ids, room_ids',
       [accountId || req.user.accountId, email.toLowerCase(), hashed, name, assignRole, siteIds || [], roomIds || []]
     );
 
-    res.status(201).json({ user: result.rows[0] });
+    const user = result.rows[0];
+
+    // If registered without password, create invite token and send email invite
+    if (!password) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      await pool.query(
+        'INSERT INTO user_invitations (user_id, token, expires_at) VALUES ($1, $2, $3)',
+        [user.id, token, expiresAt]
+      );
+
+      let frontendHost = process.env.FRONTEND_URL;
+      if (!frontendHost) {
+        const reqHost = req.headers.host || '';
+        let hostname = reqHost.split(':')[0];
+        if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') {
+          hostname = getServerIP();
+        }
+        frontendHost = `http://${hostname}:80`;
+      }
+      const inviteUrl = `${frontendHost}/accept-invite?token=${token}`;
+
+      let emailSent = false;
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: 'Welcome to TEMPSENSE — Complete Your Registration',
+          text: `Hello ${user.name},\n\nYou have been invited to join TEMPSENSE as a ${user.role}. Please click this link to set your password and access your account:\n\n${inviteUrl}\n\nThis link will expire in 7 days.`,
+          html: `
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0a0e1a; color: #f1f5f9; padding: 40px; border-radius: 12px; max-width: 600px; margin: 0 auto; border: 1px solid #1e2d4a; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <h1 style="color: #3b82f6; font-size: 28px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">TEMPSENSE</h1>
+                <p style="color: #64748b; font-size: 14px; margin: 4px 0 0 0;">Cold Chain Monitoring Platform</p>
+              </div>
+              <div style="background-color: #111827; padding: 32px; border-radius: 8px; border: 1px solid #1e2d4a;">
+                <h2 style="color: #f1f5f9; font-size: 20px; font-weight: 600; margin-top: 0; margin-bottom: 16px;">Account Invitation</h2>
+                <p style="color: #94a3b8; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
+                  Hello ${user.name},<br/><br/>
+                  You have been invited to join the TEMPSENSE platform with the role of <strong>${user.role}</strong>. Please click the button below to set your password and complete your registration.
+                </p>
+                <div style="text-align: center; margin-bottom: 24px;">
+                  <a href="${inviteUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%); color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 15px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: opacity 0.2s;">
+                    Accept Invitation & Set Password
+                  </a>
+                </div>
+                <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin-bottom: 0;">
+                  Or copy and paste this link in your browser:<br/>
+                  <a href="${inviteUrl}" style="color: #3b82f6; word-break: break-all;">${inviteUrl}</a>
+                </p>
+              </div>
+              <div style="text-align: center; margin-top: 24px; color: #64748b; font-size: 11px;">
+                This link will expire in 7 days. If you did not expect this invitation, please ignore this email.
+              </div>
+            </div>
+          `
+        });
+        emailSent = true;
+      } catch (err) {
+        console.error('[INVITE] Failed to send invitation email:', err.message);
+      }
+
+      return res.status(201).json({ user, inviteToken: token, emailSent });
+    }
+
+    res.status(201).json({ user });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Email already exists' });
     }
-    console.error('[AUTH] Register error:', err);
+    console.error('[AUTH] Register/Invite error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -314,6 +398,106 @@ router.delete('/users/:id', authMiddleware, requireRole('admin'), async (req, re
     res.json({ success: true });
   } catch (err) {
     console.error('[AUTH] Delete user error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/auth/invite/validate (public)
+router.get('/invite/validate', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+
+    const result = await pool.query(
+      `SELECT u.email, u.name, u.role
+       FROM user_invitations ui
+       JOIN users u ON ui.user_id = u.id
+       WHERE ui.token = $1 AND ui.expires_at > NOW()`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired invitation link' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[AUTH] Validate invite error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/invite/accept (public)
+router.post('/invite/accept', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and password are required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Verify token
+    const inviteResult = await pool.query(
+      `SELECT ui.user_id, u.email, u.name, u.role, u.account_id, u.site_ids, u.room_ids
+       FROM user_invitations ui
+       JOIN users u ON ui.user_id = u.id
+       WHERE ui.token = $1 AND ui.expires_at > NOW()`,
+      [token]
+    );
+
+    if (inviteResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired invitation link' });
+    }
+
+    const invitedUser = inviteResult.rows[0];
+
+    // Update password
+    const hashed = await bcrypt.hash(password, 10);
+    await pool.query(
+      'UPDATE users SET password = $1, profile_completed = TRUE WHERE id = $2',
+      [hashed, invitedUser.user_id]
+    );
+
+    // Delete token
+    await pool.query('DELETE FROM user_invitations WHERE token = $1', [token]);
+
+    // Fetch company name
+    let companyName = '';
+    try {
+      const acct = await pool.query('SELECT name FROM accounts WHERE id = $1', [invitedUser.account_id]);
+      if (acct.rows.length > 0) companyName = acct.rows[0].name;
+    } catch (e) { /* ignore */ }
+
+    // Generate JWT
+    const tokenPayload = {
+      userId: invitedUser.user_id,
+      accountId: invitedUser.account_id,
+      email: invitedUser.email,
+      name: invitedUser.name,
+      role: invitedUser.role,
+      siteIds: invitedUser.site_ids,
+      roomIds: invitedUser.room_ids,
+      profileCompleted: true,
+    };
+    const jwtToken = jwt.sign(tokenPayload, SECRET, { expiresIn: '24h' });
+
+    res.json({
+      token: jwtToken,
+      user: {
+        id: invitedUser.user_id,
+        name: invitedUser.name,
+        email: invitedUser.email,
+        role: invitedUser.role,
+        siteIds: invitedUser.site_ids,
+        roomIds: invitedUser.room_ids,
+        profileCompleted: true,
+        companyName,
+      },
+    });
+  } catch (err) {
+    console.error('[AUTH] Accept invite error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

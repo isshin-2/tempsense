@@ -96,10 +96,11 @@ CREATE INDEX IF NOT EXISTS idx_alerts_node_time
 -- 8. SMTP SETTINGS
 CREATE TABLE IF NOT EXISTS smtp_settings (
   id           SERIAL PRIMARY KEY,
-  host         VARCHAR(255) NOT NULL,
-  port         INT NOT NULL,
-  user_email   VARCHAR(255) NOT NULL,
-  password     VARCHAR(255) NOT NULL,
+  use_custom   BOOLEAN DEFAULT FALSE,
+  host         VARCHAR(255),
+  port         INT,
+  user_email   VARCHAR(255),
+  password     VARCHAR(255),
   secure       BOOLEAN DEFAULT FALSE,
   sender_name  VARCHAR(255),
   updated_at   TIMESTAMP DEFAULT NOW()
@@ -126,6 +127,15 @@ CREATE TABLE IF NOT EXISTS email_logs (
   status       VARCHAR(20), -- 'success', 'failure'
   error_message TEXT,
   sent_at      TIMESTAMP DEFAULT NOW()
+);
+
+-- 11. USER INVITATIONS (Email invitations)
+CREATE TABLE IF NOT EXISTS user_invitations (
+  id          SERIAL PRIMARY KEY,
+  user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token       VARCHAR(255) NOT NULL UNIQUE,
+  created_at  TIMESTAMP DEFAULT NOW(),
+  expires_at  TIMESTAMP NOT NULL
 );
 
 -- Seed: Default account

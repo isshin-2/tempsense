@@ -18,10 +18,11 @@ export default function UserManagement() {
   const [showInvite, setShowInvite] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', password: '', role: 'customer', siteIds: [], roomIds: [] });
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'customer', siteIds: [], roomIds: [] });
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: '', siteIds: [], roomIds: [] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [invitedInfo, setInvitedInfo] = useState(null);
 
   useEffect(() => {
     loadUsers();
@@ -39,9 +40,9 @@ export default function UserManagement() {
     e.preventDefault();
     setSaving(true); setError('');
     try {
-      await registerUser(inviteForm);
-      setShowInvite(false);
-      setInviteForm({ name: '', email: '', password: '', role: 'customer', siteIds: [], roomIds: [] });
+      const res = await registerUser(inviteForm);
+      setInvitedInfo(res);
+      setInviteForm({ name: '', email: '', role: 'customer', siteIds: [], roomIds: [] });
       loadUsers();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -119,7 +120,7 @@ export default function UserManagement() {
           <h2>User Management</h2>
           <p>Manage team members and access roles</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setError(''); setShowInvite(true); }}>
+        <button className="btn btn-primary" onClick={() => { setError(''); setInvitedInfo(null); setShowInvite(true); }}>
           <UserPlus size={16} /> Invite User
         </button>
       </div>
@@ -206,48 +207,96 @@ export default function UserManagement() {
 
       {/* Invite Modal */}
       {showInvite && (
-        <div className="modal-overlay" onClick={() => setShowInvite(false)}>
+        <div className="modal-overlay" onClick={() => { setShowInvite(false); setInvitedInfo(null); }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
             <h3>Invite New User</h3>
             {error && <div style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', marginBottom: '12px' }}>{error}</div>}
-            <form onSubmit={handleInvite}>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input className="form-input" placeholder="e.g. Ravi Kumar"
-                  value={inviteForm.name} onChange={e => setInviteForm({ ...inviteForm, name: e.target.value })} required />
+            
+            {invitedInfo ? (
+              <div style={{ padding: '8px 0' }}>
+                <div style={{
+                  background: invitedInfo.emailSent ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+                  color: invitedInfo.emailSent ? 'var(--accent-green)' : 'var(--accent-amber)',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  border: invitedInfo.emailSent ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(245,158,11,0.2)',
+                  lineHeight: 1.5,
+                  fontSize: '13.5px'
+                }}>
+                  <strong style={{ display: 'block', marginBottom: '4px', fontSize: '14.5px' }}>
+                    {invitedInfo.emailSent ? 'Invitation Sent!' : 'User Created Successfully'}
+                  </strong>
+                  {invitedInfo.emailSent
+                    ? `An invitation email has been sent to ${invitedInfo.user.email} with instructions to set their password.`
+                    : 'The user was created, but we could not send the invitation email. Please verify your SMTP settings in Settings.'
+                  }
+                </div>
+
+                <div className="form-group">
+                  <label>Share Setup Link</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      className="form-input"
+                      readOnly
+                      value={`${window.location.origin}/accept-invite?token=${invitedInfo.inviteToken}`}
+                      style={{ fontSize: '12px', fontFamily: 'monospace', flex: 1, background: 'var(--bg-primary)' }}
+                      onClick={e => e.target.select()}
+                    />
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/accept-invite?token=${invitedInfo.inviteToken}`);
+                        alert('Link copied to clipboard!');
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className="modal-actions" style={{ marginTop: '24px' }}>
+                  <button className="btn btn-primary" type="button" onClick={() => { setShowInvite(false); setInvitedInfo(null); }}>
+                    Close
+                  </button>
+                </div>
               </div>
-              <div className="form-group">
-                <label>Email Address</label>
-                <input className="form-input" type="email" placeholder="ravi@company.com"
-                  value={inviteForm.email} onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>Temporary Password</label>
-                <input className="form-input" type="password" placeholder="Min 6 characters"
-                  value={inviteForm.password} onChange={e => setInviteForm({ ...inviteForm, password: e.target.value })} required minLength={6} />
-              </div>
-              <div className="form-group">
-                <label>Role</label>
-                <select className="form-input" value={inviteForm.role}
-                  onChange={e => setInviteForm({ ...inviteForm, role: e.target.value, siteIds: [], roomIds: [] })}>
-                  <option value="customer">Customer (Room-level access)</option>
-                  <option value="site_manager">Site Manager (Site-level access)</option>
-                  <option value="admin">Admin (Full access)</option>
-                </select>
-              </div>
-              {renderAccessSelector(
-                inviteForm.role,
-                inviteForm.siteIds, (ids) => setInviteForm({ ...inviteForm, siteIds: ids }),
-                inviteForm.roomIds, (ids) => setInviteForm({ ...inviteForm, roomIds: ids })
-              )}
-              <div className="modal-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => setShowInvite(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit" disabled={saving}>
-                  {saving && <Loader2 size={14} className="animate-spin" style={{ marginRight: '6px' }} />}
-                  Send Invite
-                </button>
-              </div>
-            </form>
+            ) : (
+              <form onSubmit={handleInvite}>
+                <div className="form-group">
+                  <label>Full Name</label>
+                  <input className="form-input" placeholder="e.g. Ravi Kumar"
+                    value={inviteForm.name} onChange={e => setInviteForm({ ...inviteForm, name: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input className="form-input" type="email" placeholder="ravi@company.com"
+                    value={inviteForm.email} onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label>Role</label>
+                  <select className="form-input" value={inviteForm.role}
+                    onChange={e => setInviteForm({ ...inviteForm, role: e.target.value, siteIds: [], roomIds: [] })}>
+                    <option value="customer">Customer (Room-level access)</option>
+                    <option value="site_manager">Site Manager (Site-level access)</option>
+                    <option value="admin">Admin (Full access)</option>
+                  </select>
+                </div>
+                {renderAccessSelector(
+                  inviteForm.role,
+                  inviteForm.siteIds, (ids) => setInviteForm({ ...inviteForm, siteIds: ids }),
+                  inviteForm.roomIds, (ids) => setInviteForm({ ...inviteForm, roomIds: ids })
+                )}
+                <div className="modal-actions">
+                  <button className="btn btn-ghost" type="button" onClick={() => { setShowInvite(false); setInvitedInfo(null); }}>Cancel</button>
+                  <button className="btn btn-primary" type="submit" disabled={saving}>
+                    {saving && <Loader2 size={14} className="animate-spin" style={{ marginRight: '6px' }} />}
+                    Send Invite
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

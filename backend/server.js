@@ -102,6 +102,63 @@ async function initDB() {
       await pool.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('super_admin', 'admin', 'site_manager', 'customer'))`);
     } catch (e) { /* constraint already exists */ }
 
+    // Create user_invitations table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_invitations (
+        id          SERIAL PRIMARY KEY,
+        user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token       VARCHAR(255) NOT NULL UNIQUE,
+        created_at  TIMESTAMP DEFAULT NOW(),
+        expires_at  TIMESTAMP NOT NULL
+      )
+    `);
+
+    // Add columns and drop not null constraints on smtp_settings for custom configuration fallback
+    try {
+      await pool.query('ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS use_custom BOOLEAN DEFAULT FALSE');
+      await pool.query('ALTER TABLE smtp_settings ALTER COLUMN host DROP NOT NULL');
+      await pool.query('ALTER TABLE smtp_settings ALTER COLUMN port DROP NOT NULL');
+      await pool.query('ALTER TABLE smtp_settings ALTER COLUMN user_email DROP NOT NULL');
+      await pool.query('ALTER TABLE smtp_settings ALTER COLUMN password DROP NOT NULL');
+    } catch (e) {
+      console.log('[DB] SMTP settings migrations run');
+    }
+
+    // Restore SMTP settings from local backup if database table is empty (first start)
+    try {
+      const smtpCheck = await pool.query('SELECT COUNT(*) FROM smtp_settings');
+      if (parseInt(smtpCheck.rows[0].count) === 0) {
+        const fs = require('fs');
+        const path = require('path');
+        const backupPath = path.join(__dirname, 'smtp_settings.json');
+        let data = null;
+        if (fs.existsSync(backupPath)) {
+          try {
+            const raw = fs.readFileSync(backupPath, 'utf8');
+            data = JSON.parse(raw);
+          } catch (e) {}
+        }
+        
+        // Always force use_custom to false on first start so default ID is active
+        await pool.query(
+          `INSERT INTO smtp_settings (use_custom, host, port, user_email, password, secure, sender_name)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            false, // Default ID active on first start
+            data ? data.host : null,
+            data ? data.port : null,
+            data ? data.user_email : null,
+            data ? data.password : null,
+            data ? (data.secure === true) : false,
+            data ? data.sender_name : 'Tempsense Alerts'
+          ]
+        );
+        console.log('[DB] SMTP settings initialized. Default SMTP enabled on first start.');
+      }
+    } catch (restoreErr) {
+      console.error('[DB] Failed to initialize SMTP settings:', restoreErr.message);
+    }
+
     console.log('[DB] Schema applied and migrations checked');
 
     // Seed system account
@@ -128,8 +185,85 @@ async function initDB() {
 }
 
 
+const readline = require('readline');
+const crypto = require('crypto');
+
+const SMTP_ENCRYPTED_IV = '5ddf1b7a7b8cae386a582d3795ef1cef';
+const SMTP_ENCRYPTED_CIPHERTEXT = 'de75d44fa5ae3d5ec9e8c0bfff75fba758bf228d7623f639147eb6d1abb6b45b';
+
+// Decode Caesar cipher with shift of 28 (which wraps to 2)
+function decodeCaesar(str, shift) {
+  const s = shift % 26;
+  return str.split('').map(char => {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) {
+      return String.fromCharCode(((code - 65 - s + 26) % 26) + 65);
+    }
+    if (code >= 97 && code <= 122) {
+      return String.fromCharCode(((code - 97 - s + 26) % 26) + 97);
+    }
+    return char;
+  }).join('');
+}
+
+function decryptSMTPPassword(passphrase) {
+  try {
+    const key = crypto.createHash('sha256').update(passphrase).digest();
+    const iv = Buffer.from(SMTP_ENCRYPTED_IV, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(SMTP_ENCRYPTED_CIPHERTEXT, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    return null;
+  }
+}
+
+function askDecryptionKey() {
+  return new Promise((resolve) => {
+    if (process.env.SMTP_DECRYPTION_KEY) {
+      resolve(process.env.SMTP_DECRYPTION_KEY);
+      return;
+    }
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    rl.question('\nEnter SMTP Decryption Key: ', (key) => {
+      rl.close();
+      resolve(key);
+    });
+  });
+}
+
+async function initializeSMTPKey() {
+  let attempts = 0;
+  while (attempts < 3) {
+    const rawKey = await askDecryptionKey();
+    
+    // First, decode the user's key with Caesar cipher (shift 28)
+    const decodedKey = decodeCaesar(rawKey, 28);
+    
+    // Then, use the decoded key ("Verdex-Kappa") for AES-256 decryption
+    const decrypted = decryptSMTPPassword(decodedKey);
+    if (decrypted === 'kqqt sqsq exfk ljdx') {
+      process.env.DECRYPTED_SMTP_PASS = decrypted;
+      console.log('[SMTP] Decryption key accepted. Default SMTP enabled.');
+      return true;
+    }
+    console.error(`[SMTP] Invalid decryption key. (${2 - attempts} attempts remaining)`);
+    attempts++;
+    if (process.env.SMTP_DECRYPTION_KEY) {
+      break;
+    }
+  }
+  console.error('[SMTP] Max attempts reached or invalid key. Exiting server.');
+  process.exit(1);
+}
+
 // ===== Start =====
 async function start() {
+  await initializeSMTPKey();
   await initDB();
   
   // Start Report Scheduler

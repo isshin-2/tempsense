@@ -248,6 +248,15 @@ export async function deleteSchedule(id) {
   return res.json();
 }
 
+export async function testSchedule(id) {
+  const res = await fetch(`${API_BASE}/settings/reports/${id}/test`, {
+    method: 'POST', headers: authHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to send test report');
+  return data;
+}
+
 // ===== User Management =====
 export async function fetchUsers() {
   const res = await fetch(`${API_BASE}/auth/users`, { headers: authHeaders() });
@@ -261,6 +270,24 @@ export async function registerUser(data) {
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'Failed to register user');
+  return json;
+}
+
+export async function validateInvite(token) {
+  const res = await fetch(`${API_BASE}/auth/invite/validate?token=${token}`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Invalid or expired invitation link');
+  return json;
+}
+
+export async function acceptInvite(token, password) {
+  const res = await fetch(`${API_BASE}/auth/invite/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to accept invitation');
   return json;
 }
 

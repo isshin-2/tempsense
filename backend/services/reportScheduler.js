@@ -154,15 +154,27 @@ async function getCSVData(siteId, startDate, endDate) {
       Node: r.node_name,
       DeviceID: r.device_id,
       Room: r.room_name,
-      'T1 (°C)': r.t1 !== null ? r.t1.toFixed(2) : '',
-      'T2 (°C)': r.t2 !== null ? r.t2.toFixed(2) : '',
-      'DHT Temp (°C)': r.td !== null ? r.td.toFixed(2) : '',
-      'Humidity (%)': r.humidity !== null ? r.humidity.toFixed(2) : '',
-      'Alerts/Status': alerts.length > 0 ? alerts.join(', ') : 'Normal'
+      T1: r.t1 !== null ? r.t1.toFixed(2) : '',
+      T2: r.t2 !== null ? r.t2.toFixed(2) : '',
+      DHT: r.td !== null ? r.td.toFixed(2) : '',
+      Humidity: r.humidity !== null ? r.humidity.toFixed(2) : '',
+      Status: alerts.length > 0 ? alerts.join(', ') : 'Normal'
     };
   });
 
-  return stringify(mapped, { header: true });
+  const csvColumns = [
+    { key: 'Timestamp', header: 'Timestamp' },
+    { key: 'Node', header: 'Node' },
+    { key: 'DeviceID', header: 'DeviceID' },
+    { key: 'Room', header: 'Room' },
+    { key: 'T1', header: 'T1 (°C)' },
+    { key: 'T2', header: 'T2 (°C)' },
+    { key: 'DHT', header: 'DHT Temp (°C)' },
+    { key: 'Humidity', header: 'Humidity (%)' },
+    { key: 'Status', header: 'Alerts/Status' },
+  ];
+
+  return stringify(mapped, { header: true, columns: csvColumns });
 }
 
-module.exports = { startReportScheduler };
+module.exports = { startReportScheduler, runReport };

@@ -3,27 +3,28 @@ const pool = require('../db/pool');
 
 async function getTransporter() {
   const result = await pool.query('SELECT * FROM smtp_settings LIMIT 1');
-  if (result.rows.length === 0) {
-    // Fallback to env
+  const s = result.rows[0];
+
+  if (s && s.use_custom) {
     return nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
+      host: s.host,
+      port: s.port,
+      secure: s.secure,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: s.user_email,
+        pass: s.password,
       },
     });
   }
 
-  const s = result.rows[0];
+  // Fallback to default Gmail SMTP
   return nodemailer.createTransport({
-    host: s.host,
-    port: s.port,
-    secure: s.secure,
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
     auth: {
-      user: s.user_email,
-      pass: s.password,
+      user: 'tempsense.maxworth@gmail.com',
+      pass: process.env.DECRYPTED_SMTP_PASS,
     },
   });
 }
@@ -31,8 +32,16 @@ async function getTransporter() {
 async function sendEmail({ to, subject, text, html, attachments }) {
   try {
     const transporter = await getTransporter();
-    const result = await pool.query('SELECT sender_name, user_email FROM smtp_settings LIMIT 1');
-    const sender = result.rows[0] ? `"${result.rows[0].sender_name}" <${result.rows[0].user_email}>` : process.env.SMTP_USER;
+    const result = await pool.query('SELECT use_custom, sender_name, user_email FROM smtp_settings LIMIT 1');
+    const s = result.rows[0];
+    
+    let sender;
+    if (s && s.use_custom) {
+      sender = `"${s.sender_name || 'Tempsense Alerts'}" <${s.user_email}>`;
+    } else {
+      const senderName = (s && s.sender_name) || 'Tempsense Alerts';
+      sender = `"${senderName}" <tempsense.maxworth@gmail.com>`;
+    }
 
     const info = await transporter.sendMail({
       from: sender,

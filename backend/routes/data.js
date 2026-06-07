@@ -115,6 +115,18 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
 
     const result = await pool.query(query, params);
 
+    const csvColumns = [
+      { key: 'Timestamp', header: 'Timestamp' },
+      { key: 'Node', header: 'Node' },
+      { key: 'DeviceID', header: 'DeviceID' },
+      { key: 'Room', header: 'Room' },
+      { key: 'T1', header: 'T1 (°C)' },
+      { key: 'T2', header: 'T2 (°C)' },
+      { key: 'DHT', header: 'DHT Temp (°C)' },
+      { key: 'Humidity', header: 'Humidity (%)' },
+      { key: 'Status', header: 'Alerts/Status' },
+    ];
+
     const csvData = result.rows.map(r => {
       const alerts = [];
       if (r.t1 > r.temp_high) alerts.push('T1 High');
@@ -131,16 +143,16 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
         Node: r.node_name,
         DeviceID: r.device_id,
         Room: r.room_name,
-        'T1 (°C)': r.t1 !== null ? r.t1.toFixed(2) : '',
-        'T2 (°C)': r.t2 !== null ? r.t2.toFixed(2) : '',
-        'DHT Temp (°C)': r.td !== null ? r.td.toFixed(2) : '',
-        'Humidity (%)': r.humidity !== null ? r.humidity.toFixed(2) : '',
-        'Alerts/Status': alerts.length > 0 ? alerts.join(', ') : 'Normal'
+        T1: r.t1 !== null ? r.t1.toFixed(2) : '',
+        T2: r.t2 !== null ? r.t2.toFixed(2) : '',
+        DHT: r.td !== null ? r.td.toFixed(2) : '',
+        Humidity: r.humidity !== null ? r.humidity.toFixed(2) : '',
+        Status: alerts.length > 0 ? alerts.join(', ') : 'Normal'
       };
     });
 
     const filename = `tempsense_report_${new Date().toISOString().split('T')[0]}.csv`;
-    const csv = stringify(csvData, { header: true });
+    const csv = stringify(csvData, { header: true, columns: csvColumns });
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(csv);

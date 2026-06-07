@@ -22,3 +22,6 @@ Thumbs.db
 
 # Docker volumes
 pgdata/
+
+# Local backups / configuration files
+backend/smtp_settings.json
