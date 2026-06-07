@@ -15,7 +15,53 @@ const { Server } = require('socket.io');
 const bcrypt = require('bcryptjs');
 const pool = require('./db/pool');
 const { startReportScheduler } = require('./services/reportScheduler');
-const { startTCPServer, setSocketIO } = require('./services/tcpServer');
+const { startTCPServer, setSocketIO, setLockedStateProvider } = require('./services/tcpServer');
+const readline = require('readline');
+const crypto = require('crypto');
+
+const SMTP_ENCRYPTED_IV = '5ddf1b7a7b8cae386a582d3795ef1cef';
+const SMTP_ENCRYPTED_CIPHERTEXT = 'de75d44fa5ae3d5ec9e8c0bfff75fba758bf228d7623f639147eb6d1abb6b45b';
+
+// Decode Caesar cipher with shift of 28 (which wraps to 2)
+function decodeCaesar(str, shift) {
+  const s = shift % 26;
+  return str.split('').map(char => {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) {
+      return String.fromCharCode(((code - 65 - s + 26) % 26) + 65);
+    }
+    if (code >= 97 && code <= 122) {
+      return String.fromCharCode(((code - 97 - s + 26) % 26) + 97);
+    }
+    return char;
+  }).join('');
+}
+
+function decryptSMTPPassword(passphrase) {
+  try {
+    const key = crypto.createHash('sha256').update(passphrase).digest();
+    const iv = Buffer.from(SMTP_ENCRYPTED_IV, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(SMTP_ENCRYPTED_CIPHERTEXT, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    return null;
+  }
+}
+
+let isLocked = true;
+
+function tryUnlock(rawKey) {
+  if (!rawKey) return false;
+  const decodedKey = decodeCaesar(rawKey, 28);
+  const decrypted = decryptSMTPPassword(decodedKey);
+  if (decrypted === 'kqqt sqsq exfk ljdx') {
+    process.env.DECRYPTED_SMTP_PASS = decrypted;
+    return true;
+  }
+  return false;
+}
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -39,6 +85,57 @@ const io = new Server(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Lock middleware to intercept requests
+const lockMiddleware = (req, res, next) => {
+  // Allow health check, status check, and unlock requests
+  if (
+    req.path === '/api/health' ||
+    req.path === '/api/auth/status' ||
+    req.path === '/api/auth/unlock'
+  ) {
+    return next();
+  }
+  
+  if (isLocked) {
+    return res.status(423).json({ error: 'Server is locked. SMTP decryption key required.', locked: true });
+  }
+  
+  next();
+};
+
+app.use(lockMiddleware);
+
+// API Status & Unlock Routes
+app.get('/api/auth/status', (req, res) => {
+  res.json({ locked: isLocked });
+});
+
+app.post('/api/auth/unlock', async (req, res) => {
+  const { decryptionKey } = req.body;
+  if (!decryptionKey) {
+    return res.status(400).json({ error: 'Decryption key is required' });
+  }
+
+  if (!isLocked) {
+    return res.json({ success: true, message: 'Server is already unlocked' });
+  }
+
+  if (tryUnlock(decryptionKey)) {
+    try {
+      isLocked = false;
+      await initDB();
+      startReportScheduler();
+      console.log('[SMTP] Server successfully UNLOCKED via API.');
+      return res.json({ success: true, message: 'Server successfully unlocked' });
+    } catch (dbErr) {
+      isLocked = true; // Rollback
+      return res.status(500).json({ error: 'Failed to initialize database after unlock', details: dbErr.message });
+    }
+  }
+
+  res.status(400).json({ error: 'Invalid decryption key' });
+});
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -185,40 +282,6 @@ async function initDB() {
 }
 
 
-const readline = require('readline');
-const crypto = require('crypto');
-
-const SMTP_ENCRYPTED_IV = '5ddf1b7a7b8cae386a582d3795ef1cef';
-const SMTP_ENCRYPTED_CIPHERTEXT = 'de75d44fa5ae3d5ec9e8c0bfff75fba758bf228d7623f639147eb6d1abb6b45b';
-
-// Decode Caesar cipher with shift of 28 (which wraps to 2)
-function decodeCaesar(str, shift) {
-  const s = shift % 26;
-  return str.split('').map(char => {
-    const code = char.charCodeAt(0);
-    if (code >= 65 && code <= 90) {
-      return String.fromCharCode(((code - 65 - s + 26) % 26) + 65);
-    }
-    if (code >= 97 && code <= 122) {
-      return String.fromCharCode(((code - 97 - s + 26) % 26) + 97);
-    }
-    return char;
-  }).join('');
-}
-
-function decryptSMTPPassword(passphrase) {
-  try {
-    const key = crypto.createHash('sha256').update(passphrase).digest();
-    const iv = Buffer.from(SMTP_ENCRYPTED_IV, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(SMTP_ENCRYPTED_CIPHERTEXT, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    return null;
-  }
-}
-
 function askDecryptionKey() {
   return new Promise((resolve, reject) => {
     if (process.env.SMTP_DECRYPTION_KEY) {
@@ -241,42 +304,54 @@ function askDecryptionKey() {
 }
 
 async function initializeSMTPKey() {
-  let attempts = 0;
-  while (attempts < 3) {
-    try {
-      const rawKey = await askDecryptionKey();
-      
-      // First, decode the user's key with Caesar cipher (shift 28)
-      const decodedKey = decodeCaesar(rawKey, 28);
-      
-      // Then, use the decoded key ("Verdex-Kappa") for AES-256 decryption
-      const decrypted = decryptSMTPPassword(decodedKey);
-      if (decrypted === 'kqqt sqsq exfk ljdx') {
-        process.env.DECRYPTED_SMTP_PASS = decrypted;
-        console.log('[SMTP] Decryption key accepted. Default SMTP enabled.');
-        return true;
-      }
-      console.error(`[SMTP] Invalid decryption key. (${2 - attempts} attempts remaining)`);
-      attempts++;
-      if (process.env.SMTP_DECRYPTION_KEY) {
-        break;
-      }
-    } catch (err) {
-      console.error(`[SMTP] ${err.message}`);
-      break;
+  if (process.env.SMTP_DECRYPTION_KEY) {
+    if (tryUnlock(process.env.SMTP_DECRYPTION_KEY)) {
+      console.log('[SMTP] Decryption key accepted from environment. Default SMTP enabled.');
+      isLocked = false;
+      return true;
+    } else {
+      console.error('[SMTP] Invalid SMTP_DECRYPTION_KEY in environment.');
     }
   }
-  console.error('[SMTP] Max attempts reached or invalid key. Exiting server.');
-  process.exit(1);
+
+  // Try interactive prompt if terminal is interactive
+  if (process.stdin.isTTY) {
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        const rawKey = await askDecryptionKey();
+        if (tryUnlock(rawKey)) {
+          console.log('[SMTP] Decryption key accepted. Default SMTP enabled.');
+          isLocked = false;
+          return true;
+        }
+        console.error(`[SMTP] Invalid decryption key. (${2 - attempts} attempts remaining)`);
+        attempts++;
+      } catch (err) {
+        console.error(`[SMTP] ${err.message}`);
+        break;
+      }
+    }
+  }
+
+  console.log('[SMTP] Server started in LOCKED mode. Please unlock via the frontend or API.');
+  isLocked = true;
+  return false;
 }
 
 // ===== Start =====
 async function start() {
-  await initializeSMTPKey();
-  await initDB();
+  setLockedStateProvider(() => isLocked);
   
-  // Start Report Scheduler
-  startReportScheduler();
+  const unlocked = await initializeSMTPKey();
+  if (unlocked) {
+    try {
+      await initDB();
+      startReportScheduler();
+    } catch (err) {
+      console.error('[SERVER] Database initialization failed on startup:', err.message);
+    }
+  }
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -292,12 +367,15 @@ async function start() {
     }
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n====================================`);
     console.log(`  TEMPSENSE Server`);
     console.log(`  HTTP API:  http://localhost:${PORT}`);
     console.log(`  WebSocket: ws://localhost:${PORT}`);
     console.log(`  TCP Port:  ${TCP_PORT}`);
+    if (isLocked) {
+      console.log(`  [STATUS]   SYSTEM IS LOCKED (decryption required)`);
+    }
     console.log(`====================================\n`);
   });
 

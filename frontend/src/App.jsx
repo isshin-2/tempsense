@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
@@ -17,6 +18,8 @@ import SettingsPage from './pages/SettingsPage';
 import ScheduledReportsPage from './pages/ScheduledReportsPage';
 import UserManagement from './pages/UserManagement';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import SystemLockScreen from './components/SystemLockScreen';
+import { fetchServerStatus } from './services/api';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -61,6 +64,29 @@ function AdminRoute({ children }) {
 }
 
 export default function App() {
+  const [isLocked, setIsLocked] = useState(null);
+
+  useEffect(() => {
+    async function checkStatus() {
+      try {
+        const data = await fetchServerStatus();
+        setIsLocked(data.locked === true);
+      } catch (err) {
+        // Fallback to unlocked if server fails status check (or if offline)
+        setIsLocked(false);
+      }
+    }
+    checkStatus();
+  }, []);
+
+  if (isLocked === null) {
+    return <LoadingScreen />;
+  }
+
+  if (isLocked) {
+    return <SystemLockScreen onUnlocked={() => setIsLocked(false)} />;
+  }
+
   return (
     <AuthProvider>
       <ToastProvider>

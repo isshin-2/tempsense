@@ -351,6 +351,24 @@ export async function updateCompanyName(companyName) {
   return res.json();
 }
 
+// ===== Server Lock Status =====
+export async function fetchServerStatus() {
+  const res = await fetch(`${API_BASE}/auth/status`);
+  if (!res.ok) throw new Error('Failed to fetch server status');
+  return res.json();
+}
+
+export async function unlockServer(decryptionKey) {
+  const res = await fetch(`${API_BASE}/auth/unlock`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decryptionKey }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to unlock server');
+  return json;
+}
+
 // ===== WebSocket =====
 let socket = null;
 

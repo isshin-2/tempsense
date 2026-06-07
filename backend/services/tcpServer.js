@@ -3,9 +3,14 @@ const pool = require('../db/pool');
 const { checkAndAlert } = require('./alertEngine');
 
 let io = null;
+let getLockedState = () => true;
 
 function setSocketIO(socketIO) {
   io = socketIO;
+}
+
+function setLockedStateProvider(provider) {
+  getLockedState = provider;
 }
 
 /**
@@ -76,6 +81,11 @@ function startTCPServer(port) {
 async function processPayload(payload, remoteAddr) {
   const { t1, t2, td, h, deviceId, rebootRequired } = payload;
 
+  if (getLockedState()) {
+    console.warn(`[TCP] Ignored payload from device ${deviceId || 'unknown'} because the server is locked.`);
+    return;
+  }
+
   if (deviceId === undefined || deviceId === null) {
     console.warn(`[TCP] Payload missing deviceId from ${remoteAddr}`);
     return;
@@ -145,4 +155,4 @@ async function processPayload(payload, remoteAddr) {
   }
 }
 
-module.exports = { startTCPServer, setSocketIO };
+module.exports = { startTCPServer, setSocketIO, setLockedStateProvider };
