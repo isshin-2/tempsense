@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
   const [companyName, setCompanyName] = useState(user?.companyName || '');
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -35,6 +36,9 @@ export default function DashboardPage() {
         return updated;
       });
     });
+
+    socket.on('connect', () => setWsConnected(true));
+    socket.on('disconnect', () => setWsConnected(false));
 
     // Periodic refresh
     const interval = setInterval(loadData, 30000);
@@ -88,7 +92,20 @@ export default function DashboardPage() {
     <>
       <div className="page-header flex-between">
         <div>
-          <h2>Live Dashboard</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2>Live Dashboard</h2>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', fontWeight: 600,
+              padding: '4px 10px', borderRadius: '12px',
+              backgroundColor: wsConnected ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+              color: wsConnected ? '#22c55e' : '#ef4444',
+              border: `1px solid ${wsConnected ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+            }}>
+              <div className={`status-dot ${wsConnected ? 'online' : 'offline'}`} style={{ position: 'relative', top: 0, right: 0, width: '8px', height: '8px' }}></div>
+              {wsConnected ? 'Live Updates Active' : 'Connecting to Live Server...'}
+            </div>
+          </div>
           <p>Real-time sensor readings across all sites</p>
         </div>
         {companyName && (

@@ -207,7 +207,6 @@ router.post('/reports/:id/test', authMiddleware, requireRole('admin'), async (re
     }
     
     const s = result.rows[0];
-    
     // Run report immediately (creates attachments, sends email via SMTP)
     await runReport(s);
     
@@ -218,4 +217,94 @@ router.post('/reports/:id/test', authMiddleware, requireRole('admin'), async (re
   }
 });
 
+const { checkForUpdates, installUpdate, startAutoUpdateScheduler } = require('../services/autoUpdater');
+const { runDiagnostics } = require('../services/diagnostics');
+
+// GET /api/settings/update - Fetch update settings and git status
+router.get('/update', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const configRes = await pool.query('SELECT auto_update_enabled, auto_update_interval, last_update_check FROM system_settings LIMIT 1');
+    const config = configRes.rows[0] || { auto_update_enabled: true, auto_update_interval: 24, last_update_check: null };
+    
+    const gitStatus = await checkForUpdates();
+    
+    res.json({
+      config: {
+        autoUpdateEnabled: config.auto_update_enabled === true,
+        autoUpdateInterval: config.auto_update_interval || 24,
+        lastUpdateCheck: config.last_update_check
+      },
+      git: gitStatus
+    });
+  } catch (err) {
+    console.error('[SETTINGS] GET Update error:', err);
+    res.status(500).json({ error: 'Failed to retrieve update configuration' });
+  }
+});
+
+// POST /api/settings/update/check - Trigger manual update check
+router.post('/update/check', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const gitStatus = await checkForUpdates();
+    res.json(gitStatus);
+  } catch (err) {
+    console.error('[SETTINGS] POST Check Update error:', err);
+    res.status(500).json({ error: 'Failed to check for updates' });
+  }
+});
+
+// POST /api/settings/update/install - Trigger update installation and server reboot
+router.post('/update/install', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await installUpdate();
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[SETTINGS] POST Install Update error:', err);
+    res.status(500).json({ error: 'Failed to install updates', details: err.message });
+  }
+});
+
+// POST /api/settings/update/config - Save automatic check config
+router.post('/update/config', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const { auto_update_enabled, auto_update_interval } = req.body;
+    
+    if (auto_update_interval && (isNaN(auto_update_interval) || auto_update_interval <= 0)) {
+      return res.status(400).json({ error: 'Update interval must be a positive number of hours' });
+    }
+
+    await pool.query(
+      `UPDATE system_settings SET 
+        auto_update_enabled = $1, 
+        auto_update_interval = $2,
+        updated_at = NOW()
+       WHERE id = 1`,
+      [auto_update_enabled === true, auto_update_interval || 24]
+    );
+
+    // Restart/apply scheduler configuration
+    await startAutoUpdateScheduler();
+
+    res.json({ success: true, message: 'Configuration saved successfully' });
+  } catch (err) {
+    console.error('[SETTINGS] POST Update Config error:', err);
+    res.status(500).json({ error: 'Failed to save configuration' });
+  }
+});
+
+// GET /api/settings/diagnose - Run self-diagnostics
+router.get('/diagnose', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const diagnostics = await runDiagnostics();
+    res.json(diagnostics);
+  } catch (err) {
+    console.error('[SETTINGS] GET Diagnose error:', err);
+    res.status(500).json({ error: 'Diagnostics suite execution failed', details: err.message });
+  }
+});
+
 module.exports = router;
+

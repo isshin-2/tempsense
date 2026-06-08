@@ -51,7 +51,7 @@ export default function SystemLockScreen({ onUnlocked }) {
               id="decryption-key"
               type="password"
               className="form-input"
-              placeholder="Enter passphrase (e.g. Xgtfgz-Mcrrc)"
+              placeholder="Enter SMTP decryption key..."
               value={key}
               onChange={(e) => setKey(e.target.value)}
               disabled={loading}

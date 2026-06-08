@@ -16,6 +16,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('./db/pool');
 const { startReportScheduler } = require('./services/reportScheduler');
 const { startTCPServer, setSocketIO, setLockedStateProvider } = require('./services/tcpServer');
+const { startMDNS } = require('./services/mdnsService');
 const readline = require('readline');
 const crypto = require('crypto');
 
@@ -106,6 +107,18 @@ const lockMiddleware = (req, res, next) => {
 
 app.use(lockMiddleware);
 
+// Helper to initialize all services once the database is unlocked
+async function setupUnlockedServices() {
+  await initDB();
+  startReportScheduler();
+  try {
+    const { startAutoUpdateScheduler } = require('./services/autoUpdater');
+    startAutoUpdateScheduler();
+  } catch (err) {
+    console.error('[SERVER] Failed to start auto updater:', err.message);
+  }
+}
+
 // API Status & Unlock Routes
 app.get('/api/auth/status', (req, res) => {
   res.json({ locked: isLocked });
@@ -124,13 +137,12 @@ app.post('/api/auth/unlock', async (req, res) => {
   if (tryUnlock(decryptionKey)) {
     try {
       isLocked = false;
-      await initDB();
-      startReportScheduler();
+      await setupUnlockedServices();
       console.log('[SMTP] Server successfully UNLOCKED via API.');
       return res.json({ success: true, message: 'Server successfully unlocked' });
     } catch (dbErr) {
       isLocked = true; // Rollback
-      return res.status(500).json({ error: 'Failed to initialize database after unlock', details: dbErr.message });
+      return res.status(500).json({ error: 'Failed to initialize system services after unlock', details: dbErr.message });
     }
   }
 
@@ -209,6 +221,25 @@ async function initDB() {
         expires_at  TIMESTAMP NOT NULL
       )
     `);
+
+    // Create system_settings table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id                     SERIAL PRIMARY KEY,
+        auto_update_enabled    BOOLEAN DEFAULT TRUE,
+        auto_update_interval   INT DEFAULT 24, -- in hours
+        last_update_check      TIMESTAMP,
+        updated_at             TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Seed default system settings if table is empty
+    const settingsCheck = await pool.query('SELECT COUNT(*) FROM system_settings');
+    if (parseInt(settingsCheck.rows[0].count) === 0) {
+      await pool.query('INSERT INTO system_settings (auto_update_enabled, auto_update_interval) VALUES (TRUE, 24)');
+      console.log('[DB] Default system settings seeded');
+    }
+
 
     // Add columns and drop not null constraints on smtp_settings for custom configuration fallback
     try {
@@ -342,16 +373,7 @@ async function initializeSMTPKey() {
 // ===== Start =====
 async function start() {
   setLockedStateProvider(() => isLocked);
-  
-  const unlocked = await initializeSMTPKey();
-  if (unlocked) {
-    try {
-      await initDB();
-      startReportScheduler();
-    } catch (err) {
-      console.error('[SERVER] Database initialization failed on startup:', err.message);
-    }
-  }
+  startMDNS();
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -377,6 +399,19 @@ async function start() {
       console.log(`  [STATUS]   SYSTEM IS LOCKED (decryption required)`);
     }
     console.log(`====================================\n`);
+
+    // Initialize key prompt/auto-unlock asynchronously
+    initializeSMTPKey().then(async (unlocked) => {
+      if (unlocked) {
+        try {
+          await setupUnlockedServices();
+        } catch (err) {
+          console.error('[SERVER] System initialization failed on startup:', err.message);
+        }
+      }
+    }).catch((err) => {
+      console.error('[SERVER] SMTP key initialization failed:', err.message);
+    });
   });
 
   startTCPServer(TCP_PORT);

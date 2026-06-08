@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
     "bump-version": "node -e \"const fs=require('fs'); fs.writeFileSync('public/version.json', JSON.stringify({version: Date.now().toString()})); console.log('Version bumped!')\""

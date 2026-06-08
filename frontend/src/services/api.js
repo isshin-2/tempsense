@@ -393,3 +393,40 @@ export function disconnectSocket() {
   }
 }
 
+// ===== Updates & Diagnostics =====
+export async function fetchUpdateStatus() {
+  const res = await fetch(`${API_BASE}/settings/update`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch update status');
+  return res.json();
+}
+
+export async function checkUpdates() {
+  const res = await fetch(`${API_BASE}/settings/update/check`, { method: 'POST', headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to run update check');
+  return res.json();
+}
+
+export async function installUpdate() {
+  const res = await fetch(`${API_BASE}/settings/update/install`, { method: 'POST', headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to trigger update installation');
+  return data;
+}
+
+export async function saveUpdateConfig(enabled, interval) {
+  const res = await fetch(`${API_BASE}/settings/update/config`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ auto_update_enabled: enabled, auto_update_interval: interval }),
+  });
+  if (!res.ok) throw new Error('Failed to save update configuration');
+  return res.json();
+}
+
+export async function runSystemDiagnostics() {
+  const res = await fetch(`${API_BASE}/settings/diagnose`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Diagnostics suite failed to run');
+  return res.json();
+}
+
+

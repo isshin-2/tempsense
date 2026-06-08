@@ -1,6 +1,6 @@
 import { Thermometer } from 'lucide-react';
 
-export default function LoadingScreen() {
+export default function LoadingScreen({ message = 'Initializing...' }) {
   return (
     <div style={{
       position: 'fixed',
@@ -25,7 +25,7 @@ export default function LoadingScreen() {
         marginBottom: '8px',
       }}>TEMPSENSE</h1>
       <p style={{ color: 'var(--text-muted)', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase' }}>
-        Initializing...
+        {message}
       </p>
       <div style={{
         marginTop: '32px',

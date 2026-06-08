@@ -65,22 +65,35 @@ function AdminRoute({ children }) {
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(null);
+  const [loadingMessage, setLoadingMessage] = useState('Initializing...');
 
   useEffect(() => {
+    let active = true;
+    let timer;
+
     async function checkStatus() {
       try {
         const data = await fetchServerStatus();
-        setIsLocked(data.locked === true);
+        if (active) {
+          setIsLocked(data.locked === true);
+        }
       } catch (err) {
-        // Fallback to unlocked if server fails status check (or if offline)
-        setIsLocked(false);
+        if (active) {
+          setLoadingMessage('Connecting to server...');
+          timer = setTimeout(checkStatus, 2000);
+        }
       }
     }
     checkStatus();
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   if (isLocked === null) {
-    return <LoadingScreen />;
+    return <LoadingScreen message={loadingMessage} />;
   }
 
   if (isLocked) {

@@ -162,7 +162,8 @@ echo   [6/6] Starting services...
 echo.
 
 :: Start Backend in a minimized window
-start /min "TEMPSENSE Backend [port 3001]" cmd /c "cd /d "%~dp0backend" && title TEMPSENSE Backend [port 3001] && color 0A && echo. && echo   TEMPSENSE Backend Server && echo   ======================== && echo. && npm start"
+start /min "TEMPSENSE Backend [port 3001]" cmd /c "cd /d "%~dp0backend" && title TEMPSENSE Backend [port 3001] && color 0A && :loop && echo. && echo   TEMPSENSE Backend Server && echo   ======================== && echo. && call npm start && timeout /t 2 >nul && goto loop"
+
 
 :: Give backend a moment to begin startup
 timeout /t 3 /nobreak >nul
