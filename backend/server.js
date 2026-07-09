@@ -93,7 +93,8 @@ const lockMiddleware = (req, res, next) => {
   if (
     req.path === '/api/health' ||
     req.path === '/api/auth/status' ||
-    req.path === '/api/auth/unlock'
+    req.path === '/api/auth/unlock' ||
+    req.path === '/api/auth/company/public'
   ) {
     return next();
   }
@@ -189,6 +190,11 @@ async function initDB() {
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS location VARCHAR(300)`);
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS notes TEXT`);
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS reboot_required BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS t1_name VARCHAR(100) DEFAULT 'DS18 #1'`);
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS t2_name VARCHAR(100) DEFAULT 'DS18 #2'`);
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS td_name VARCHAR(100) DEFAULT 'DHT Temp'`);
+    await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS humidity_name VARCHAR(100) DEFAULT 'Humidity'`);
+    await pool.query(`ALTER TABLE scheduled_reports ADD COLUMN IF NOT EXISTS exclude_alerts BOOLEAN DEFAULT FALSE`);
     
     // RBAC Migration: Add new user columns
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);

@@ -62,14 +62,14 @@ router.get('/', authMiddleware, async (req, res) => {
 // POST /api/nodes
 router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { roomId, deviceId, name, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, notes } = req.body;
+    const { roomId, deviceId, name, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, notes, t1Name, t2Name, tdName, humidityName } = req.body;
     if (!roomId || deviceId === undefined || !name) {
       return res.status(400).json({ error: 'roomId, deviceId, and name are required' });
     }
 
     const result = await pool.query(
-      `INSERT INTO nodes (room_id, device_id, name, location, ip_address, tcp_port, sampling_interval, temp_high, temp_low, humidity_high, humidity_low, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      `INSERT INTO nodes (room_id, device_id, name, location, ip_address, tcp_port, sampling_interval, temp_high, temp_low, humidity_high, humidity_low, notes, t1_name, t2_name, td_name, humidity_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
       [
         roomId, deviceId, name, location || null,
         ipAddress || null,
@@ -79,7 +79,11 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
         tempLow ?? 2.0,
         humidityHigh ?? 80.0,
         humidityLow ?? 20.0,
-        notes || null
+        notes || null,
+        t1Name || 'DS18 #1',
+        t2Name || 'DS18 #2',
+        tdName || 'DHT Temp',
+        humidityName || 'Humidity'
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -95,7 +99,7 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
 // PUT /api/nodes/:id
 router.put('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { name, deviceId, roomId, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, notes } = req.body;
+    const { name, deviceId, roomId, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, notes, t1Name, t2Name, tdName, humidityName } = req.body;
     
     const result = await pool.query(
       `UPDATE nodes SET
@@ -111,9 +115,13 @@ router.put('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
         humidity_high = COALESCE($10, humidity_high),
         humidity_low = COALESCE($11, humidity_low),
         is_active = COALESCE($12, is_active),
-        notes = COALESCE($13, notes)
-       WHERE id = $14 RETURNING *`,
-      [name, deviceId, roomId, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, notes, req.params.id]
+        notes = COALESCE($13, notes),
+        t1_name = COALESCE($14, t1_name),
+        t2_name = COALESCE($15, t2_name),
+        td_name = COALESCE($16, td_name),
+        humidity_name = COALESCE($17, humidity_name)
+       WHERE id = $18 RETURNING *`,
+      [name, deviceId, roomId, location, ipAddress, tcpPort, samplingInterval, tempHigh, tempLow, humidityHigh, humidityLow, isActive, notes, t1Name, t2Name, tdName, humidityName, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Node not found' });
     res.json(result.rows[0]);

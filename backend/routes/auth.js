@@ -151,7 +151,7 @@ router.post('/register', authMiddleware, requireRole('admin'), async (req, res) 
         if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') {
           hostname = getServerIP();
         }
-        frontendHost = `http://${hostname}:80`;
+        frontendHost = `http://${hostname}:81`;
       }
       const inviteUrl = `${frontendHost}/accept-invite?token=${token}`;
 
@@ -366,6 +366,16 @@ router.get('/company', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT name FROM accounts WHERE id = $1', [req.user.accountId]);
     res.json({ companyName: result.rows.length > 0 ? result.rows[0].name : '' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/auth/company/public (public access)
+router.get('/company/public', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT name FROM accounts ORDER BY id ASC LIMIT 1');
+    res.json({ companyName: result.rows.length > 0 ? result.rows[0].name : 'TEMPSENSE' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

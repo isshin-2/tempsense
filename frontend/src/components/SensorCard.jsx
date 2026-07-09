@@ -3,7 +3,8 @@ export default function SensorCard({ node }) {
     node_name, room_name, site_name, device_id,
     t1, t2, td, humidity,
     temp_high, temp_low, humidity_high, humidity_low,
-    last_seen, recorded_at, reboot_required
+    last_seen, recorded_at, reboot_required,
+    t1_name, t2_name, td_name, humidity_name
   } = node;
 
   function tempClass(val) {
@@ -70,25 +71,25 @@ export default function SensorCard({ node }) {
 
       <div className="sensor-readings">
         <div className="reading-box">
-          <div className="label">DS18 #1</div>
+          <div className="label">{t1_name || 'DS18 #1'}</div>
           <div className={`value ${tempClass(t1)}`}>
             {format(t1)}<span className="unit">°C</span>
           </div>
         </div>
         <div className="reading-box">
-          <div className="label">DS18 #2</div>
+          <div className="label">{t2_name || 'DS18 #2'}</div>
           <div className={`value ${tempClass(t2)}`}>
             {format(t2)}<span className="unit">°C</span>
           </div>
         </div>
         <div className="reading-box">
-          <div className="label">DHT Temp</div>
+          <div className="label">{td_name || 'DHT Temp'}</div>
           <div className={`value ${tempClass(td)}`}>
             {format(td)}<span className="unit">°C</span>
           </div>
         </div>
         <div className="reading-box">
-          <div className="label">Humidity</div>
+          <div className="label">{humidity_name || 'Humidity'}</div>
           <div className={`value ${humidClass(humidity)}`}>
             {format(humidity)}<span className="unit">%</span>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Thermometer, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { fetchPublicCompanyName } from '../services/api';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -9,11 +10,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [companyName, setCompanyName] = useState('Maxworth Techserv');
   const emailRef = useRef(null);
 
-  // Auto-focus email field on mount
+  // Auto-focus email field on mount and load company name
   useEffect(() => {
     if (emailRef.current) emailRef.current.focus();
+    fetchPublicCompanyName()
+      .then(data => {
+        if (data.companyName) setCompanyName(data.companyName);
+      })
+      .catch(err => console.error('Failed to load company name', err));
   }, []);
 
   async function handleSubmit(e) {
@@ -125,7 +132,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
-          Maxworth Techserv • Industrial IoT
+          {companyName} • Industrial IoT
         </div>
       </div>
 

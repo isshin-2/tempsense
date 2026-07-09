@@ -429,4 +429,21 @@ export async function runSystemDiagnostics() {
   return res.json();
 }
 
+export async function fetchPublicCompanyName() {
+  const res = await fetch(`${API_BASE}/auth/company/public`);
+  if (!res.ok) throw new Error('Failed to fetch public company name');
+  return res.json();
+}
+
+export async function restoreDatabase(backupData) {
+  const res = await fetch(`${API_BASE}/settings/restore`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(backupData),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to restore database');
+  return json;
+}
+
 

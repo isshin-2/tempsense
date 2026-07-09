@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS nodes (
   reboot_required BOOLEAN DEFAULT FALSE,
   last_seen       TIMESTAMP,
   notes           TEXT,
+  t1_name         VARCHAR(100) DEFAULT 'DS18 #1',
+  t2_name         VARCHAR(100) DEFAULT 'DS18 #2',
+  td_name         VARCHAR(100) DEFAULT 'DHT Temp',
+  humidity_name   VARCHAR(100) DEFAULT 'Humidity',
   created_at      TIMESTAMP DEFAULT NOW()
 );
 
@@ -115,6 +119,7 @@ CREATE TABLE IF NOT EXISTS scheduled_reports (
   site_id      INT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   report_type  VARCHAR(20) DEFAULT 'pdf', -- 'pdf', 'csv', 'both'
   is_active    BOOLEAN DEFAULT TRUE,
+  exclude_alerts BOOLEAN DEFAULT FALSE,
   last_run     TIMESTAMP,
   created_at   TIMESTAMP DEFAULT NOW()
 );

@@ -2,14 +2,64 @@ const PDFDocument = require('pdfkit');
 const pool = require('../db/pool');
 
 /**
+ * Helper to calculate stats with exact timestamps for min/max readings.
+ */
+function calcStatsWithTimestamps(rows, valKey) {
+  let minVal = Infinity;
+  let minTime = null;
+  let maxVal = -Infinity;
+  let maxTime = null;
+  let sum = 0;
+  let count = 0;
+
+  for (const r of rows) {
+    const val = r[valKey];
+    if (val !== null && val !== undefined) {
+      sum += val;
+      count++;
+      if (val < minVal) {
+        minVal = val;
+        minTime = r.recorded_at;
+      }
+      if (val > maxVal) {
+        maxVal = val;
+        maxTime = r.recorded_at;
+      }
+    }
+  }
+
+  if (count === 0) {
+    return { min: '-\n', max: '-\n', avg: '-', count: 0 };
+  }
+
+  const formatTime = (t) => {
+    if (!t) return '';
+    const d = new Date(t);
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  return {
+    min: `${minVal.toFixed(2)}\n(${formatTime(minTime)})`,
+    max: `${maxVal.toFixed(2)}\n(${formatTime(maxTime)})`,
+    avg: (sum / count).toFixed(2),
+    count
+  };
+}
+
+/**
  * Generate an ISO-compliant cold chain monitoring PDF report.
  *
- * @param {Object} opts - { siteId, roomId, nodeId, startDate, endDate, isInternal }
+ * @param {Object} opts - { siteId, roomId, nodeId, startDate, endDate, isInternal, excludeAlerts }
  * @param {import('express').Response} res - Optional Express response to pipe PDF into
  * @returns {Promise<Buffer|void>} - Returns buffer if isInternal is true
  */
 async function generateReport(opts, res) {
-  const { siteId, roomId, nodeId, startDate, endDate, isInternal } = opts;
+  const { siteId, roomId, nodeId, startDate, endDate, isInternal, excludeAlerts } = opts;
+
+  // Fetch organization name
+  const accountRes = await pool.query('SELECT name FROM accounts ORDER BY id ASC LIMIT 1');
+  const companyName = accountRes.rows.length > 0 ? accountRes.rows[0].name : 'TEMPSENSE';
 
   // Fetch context
   const siteRes = await pool.query('SELECT * FROM sites WHERE id = $1', [siteId]);
@@ -30,7 +80,8 @@ async function generateReport(opts, res) {
   // Query sensor data
   let query = `
     SELECT sd.*, n.name as node_name, n.device_id, r.name as room_name,
-           n.temp_high, n.temp_low, n.humidity_high, n.humidity_low
+           n.temp_high, n.temp_low, n.humidity_high, n.humidity_low,
+           n.t1_name, n.t2_name, n.td_name, n.humidity_name
     FROM sensor_data sd
     JOIN nodes n ON sd.node_id = n.id
     JOIN rooms r ON n.room_id = r.id
@@ -52,34 +103,56 @@ async function generateReport(opts, res) {
   query += ' ORDER BY sd.recorded_at ASC';
 
   const dataRes = await pool.query(query, params);
-  const rows = dataRes.rows;
+  const rawRows = dataRes.rows;
 
-  // Compute statistics
-  const stats = { t1: [], t2: [], td: [], humidity: [] };
-  for (const r of rows) {
-    if (r.t1 !== null) stats.t1.push(r.t1);
-    if (r.t2 !== null) stats.t2.push(r.t2);
-    if (r.td !== null) stats.td.push(r.td);
-    if (r.humidity !== null) stats.humidity.push(r.humidity);
-  }
+  // Group rows by node and apply alert filtering
+  const nodesData = {};
+  const filteredRows = [];
 
-  function calcStats(arr) {
-    if (arr.length === 0) return { min: '-', max: '-', avg: '-', count: 0 };
-    const min = Math.min(...arr);
-    const max = Math.max(...arr);
-    const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-    return { min: min.toFixed(2), max: max.toFixed(2), avg: avg.toFixed(2), count: arr.length };
+  for (const r of rawRows) {
+    const alerts = [];
+    if (r.t1 > r.temp_high) alerts.push('T1 High');
+    if (r.t1 < r.temp_low) alerts.push('T1 Low');
+    if (r.t2 > r.temp_high) alerts.push('T2 High');
+    if (r.t2 < r.temp_low) alerts.push('T2 Low');
+    if (r.td > r.temp_high) alerts.push('DHT High');
+    if (r.td < r.temp_low) alerts.push('DHT Low');
+    if (r.humidity > r.humidity_high) alerts.push('Hum High');
+    if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+
+    const hasBreach = alerts.length > 0;
+    if (excludeAlerts && hasBreach) {
+      continue; // Skip readings with breaches
+    }
+
+    filteredRows.push(r);
+
+    const nId = r.node_id;
+    if (!nodesData[nId]) {
+      nodesData[nId] = {
+        name: r.node_name || `Node ${r.device_id}`,
+        t1_name: r.t1_name || 'DS18 #1',
+        t2_name: r.t2_name || 'DS18 #2',
+        td_name: r.td_name || 'DHT Temp',
+        humidity_name: r.humidity_name || 'Humidity',
+        rawRows: []
+      };
+    }
+    nodesData[nId].rawRows.push(r);
   }
 
   // Fetch alert count
-  const alertQuery = `
-    SELECT COUNT(*) as count FROM alerts a
-    JOIN nodes n ON a.node_id = n.id
-    JOIN rooms r ON n.room_id = r.id
-    WHERE r.site_id = $1 AND a.sent_at >= $2 AND a.sent_at <= $3
-  `;
-  const alertRes = await pool.query(alertQuery, [siteId, startDate, endDate]);
-  const alertCount = alertRes.rows[0]?.count || 0;
+  let alertCount = 0;
+  if (!excludeAlerts) {
+    const alertQuery = `
+      SELECT COUNT(*) as count FROM alerts a
+      JOIN nodes n ON a.node_id = n.id
+      JOIN rooms r ON n.room_id = r.id
+      WHERE r.site_id = $1 AND a.sent_at >= $2 AND a.sent_at <= $3
+    `;
+    const alertRes = await pool.query(alertQuery, [siteId, startDate, endDate]);
+    alertCount = alertRes.rows[0]?.count || 0;
+  }
 
   // ===== BUILD PDF =====
   return new Promise((resolve, reject) => {
@@ -114,14 +187,14 @@ async function generateReport(opts, res) {
     doc.fontSize(9).font('Helvetica');
 
     const meta = [
-      ['Organization', 'Maxworth Techserv'],
+      ['Organization', companyName],
       ['Site', `${site.name} — ${site.location || 'N/A'}`],
       ['Room', roomName],
       ['Node', nodeName],
       ['Report Period', `${startDate.split('T')[0]} to ${endDate.split('T')[0]}`],
       ['Generated On', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })],
-      ['Total Readings', `${rows.length}`],
-      ['Total Alerts Triggered', `${alertCount}`],
+      ['Total Readings', `${filteredRows.length}`],
+      ['Total Alerts Triggered', excludeAlerts ? '0 (Excluded)' : `${alertCount}`],
     ];
 
     for (const [label, value] of meta) {
@@ -131,18 +204,30 @@ async function generateReport(opts, res) {
     doc.moveDown(1);
 
     // --- Statistical Summary Table ---
-    doc.fontSize(12).font('Helvetica-Bold').text('Statistical Summary');
+    doc.fontSize(12).font('Helvetica-Bold').text('Statistical Summary (Per Sensor)');
     doc.moveDown(0.5);
 
     const tableTop = doc.y;
-    const colWidths = [120, 80, 80, 80, 80];
-    const headers = ['Parameter', 'Min', 'Max', 'Average', 'Readings'];
-    const tableData = [
-      ['DS18 Probe 1 (°C)', ...Object.values(calcStats(stats.t1))],
-      ['DS18 Probe 2 (°C)', ...Object.values(calcStats(stats.t2))],
-      ['DHT Temp (°C)', ...Object.values(calcStats(stats.td))],
-      ['Humidity (%)', ...Object.values(calcStats(stats.humidity))],
-    ];
+    const colWidths = [160, 100, 100, 40, 40];
+    const headers = ['Sensor Parameter', 'Min (Timestamp)', 'Max (Timestamp)', 'Avg', 'Count'];
+    
+    const tableData = [];
+    for (const nId of Object.keys(nodesData)) {
+      const nd = nodesData[nId];
+      const t1Stats = calcStatsWithTimestamps(nd.rawRows, 't1');
+      const t2Stats = calcStatsWithTimestamps(nd.rawRows, 't2');
+      const tdStats = calcStatsWithTimestamps(nd.rawRows, 'td');
+      const humStats = calcStatsWithTimestamps(nd.rawRows, 'humidity');
+
+      if (t1Stats.count > 0) tableData.push([`${nd.name} - ${nd.t1_name} (°C)`, ...Object.values(t1Stats)]);
+      if (t2Stats.count > 0) tableData.push([`${nd.name} - ${nd.t2_name} (°C)`, ...Object.values(t2Stats)]);
+      if (tdStats.count > 0) tableData.push([`${nd.name} - ${nd.td_name} (°C)`, ...Object.values(tdStats)]);
+      if (humStats.count > 0) tableData.push([`${nd.name} - ${nd.humidity_name} (%)`, ...Object.values(humStats)]);
+    }
+
+    if (tableData.length === 0) {
+      tableData.push(['No Parameter Data', '-', '-', '-', '-']);
+    }
 
     // Header row
     let xPos = 50;
@@ -157,28 +242,47 @@ async function generateReport(opts, res) {
 
     // Data rows
     let rowY = tableTop + 16;
-    doc.font('Helvetica').fontSize(8);
+    doc.font('Helvetica').fontSize(7.5);
     for (let r = 0; r < tableData.length; r++) {
+      // If table will overflow, add page
+      if (rowY > 730) {
+        doc.addPage();
+        rowY = 50;
+      }
       const bgColor = r % 2 === 0 ? '#f0f4ff' : '#ffffff';
-      doc.rect(50, rowY, 440, 15).fill(bgColor);
+      doc.rect(50, rowY, 440, 26).fill(bgColor); // Set row height to 26 to fit timestamp newlines
       doc.fillColor('#000');
       xPos = 50;
       for (let c = 0; c < tableData[r].length; c++) {
-        doc.text(String(tableData[r][c]), xPos + 4, rowY + 3, { width: colWidths[c], align: 'left' });
+        doc.text(String(tableData[r][c]), xPos + 4, rowY + 4, { width: colWidths[c], align: 'left' });
         xPos += colWidths[c];
       }
-      rowY += 15;
+      rowY += 26;
     }
 
-    doc.moveDown(3);
+    doc.y = rowY + 15;
+    doc.moveDown(1);
 
     // --- Full Data Log ---
-    if (rows.length > 0) {
+    if (filteredRows.length > 0) {
       doc.addPage();
       doc.fontSize(12).font('Helvetica-Bold').text('Data Log');
       doc.moveDown(0.5);
 
-      const logHeaders = ['Timestamp', 'Node', 'T1 °C', 'T2 °C', 'DHT °C', 'Hum %', 'Status'];
+      // Determine dynamic headers if single node
+      let logHeaders = ['Timestamp', 'Node', 'T1 °C', 'T2 °C', 'DHT °C', 'Hum %', 'Status'];
+      if (nodeId && filteredRows.length > 0) {
+        const f = filteredRows[0];
+        logHeaders = [
+          'Timestamp',
+          'Node',
+          `${f.t1_name || 'T1'} °C`,
+          `${f.t2_name || 'T2'} °C`,
+          `${f.td_name || 'DHT'} °C`,
+          `${f.humidity_name || 'Hum'} %`,
+          'Status'
+        ];
+      }
       const logWidths = [105, 80, 45, 45, 45, 45, 80];
 
       let ly = doc.y;
@@ -192,14 +296,13 @@ async function generateReport(opts, res) {
       doc.fillColor('#000').font('Helvetica').fontSize(7);
       ly += 14;
 
-      // Limit to 500 for sanity in one PDF, but better than 50
-      const maxRows = Math.min(rows.length, 500); 
+      const maxRows = Math.min(filteredRows.length, 500); 
       for (let i = 0; i < maxRows; i++) {
         if (ly > 750) {
           doc.addPage();
           ly = 50;
         }
-        const r = rows[i];
+        const r = filteredRows[i];
         
         const alerts = [];
         if (r.t1 > r.temp_high) alerts.push('T1 High');
@@ -232,9 +335,9 @@ async function generateReport(opts, res) {
         ly += 12;
       }
       
-      if (rows.length > 500) {
+      if (filteredRows.length > 500) {
         doc.moveDown(1);
-        doc.fontSize(8).fillColor('#666').text(`... showing first 500 of ${rows.length} readings ...`, { align: 'center' });
+        doc.fontSize(8).fillColor('#666').text(`... showing first 500 of ${filteredRows.length} readings ...`, { align: 'center' });
       }
     }
 
@@ -257,7 +360,7 @@ async function generateReport(opts, res) {
     doc.moveDown(0.5);
     doc.text('Date: _______________________');
     doc.moveDown(2);
-    doc.fontSize(7).fillColor('#999').text('Generated by Tempsense v1.1 — Maxworth Techserv', { align: 'center' });
+    doc.fontSize(7).fillColor('#999').text(`Generated by Tempsense v1.1 — ${companyName}`, { align: 'center' });
 
     doc.end();
     if (!isInternal && !res) resolve();

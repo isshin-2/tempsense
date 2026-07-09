@@ -295,6 +295,129 @@ router.post('/update/config', authMiddleware, requireRole('admin'), async (req, 
   }
 });
 
+// GET /api/settings/backup - Export database schema and temperature data as JSON
+router.get('/backup', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const sites = await pool.query('SELECT * FROM sites ORDER BY id ASC');
+    const rooms = await pool.query('SELECT * FROM rooms ORDER BY id ASC');
+    const nodes = await pool.query('SELECT * FROM nodes ORDER BY id ASC');
+    const sensorData = await pool.query('SELECT * FROM sensor_data ORDER BY id ASC');
+    const smtpSettings = await pool.query('SELECT * FROM smtp_settings ORDER BY id ASC');
+    const scheduledReports = await pool.query('SELECT * FROM scheduled_reports ORDER BY id ASC');
+
+    const backup = {
+      version: '1.1',
+      generated_at: new Date().toISOString(),
+      sites: sites.rows,
+      rooms: rooms.rows,
+      nodes: nodes.rows,
+      sensor_data: sensorData.rows,
+      smtp_settings: smtpSettings.rows,
+      scheduled_reports: scheduledReports.rows,
+    };
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=tempsense_backup_${dateStr}.json`);
+    res.send(JSON.stringify(backup, null, 2));
+  } catch (err) {
+    console.error('[SETTINGS] Database backup error:', err);
+    res.status(500).json({ error: 'Failed to generate database backup', details: err.message });
+  }
+});
+
+// POST /api/settings/restore - Import database schema and data from JSON
+router.post('/restore', authMiddleware, requireRole('admin'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const backup = req.body;
+    if (!backup || !backup.sites || !backup.rooms || !backup.nodes || !backup.sensor_data) {
+      return res.status(400).json({ error: 'Invalid backup file format' });
+    }
+
+    await client.query('BEGIN');
+
+    // WIPE tables in cascade order
+    await client.query('TRUNCATE TABLE email_logs, alerts, sensor_data, nodes, rooms, sites, scheduled_reports, smtp_settings CASCADE');
+
+    // 1. Restore sites
+    for (const site of backup.sites) {
+      await client.query(
+        'INSERT INTO sites (id, account_id, name, location, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [site.id, site.account_id, site.name, site.location, site.created_at]
+      );
+    }
+
+    // 2. Restore rooms
+    for (const room of backup.rooms) {
+      await client.query(
+        'INSERT INTO rooms (id, site_id, name, created_at) VALUES ($1, $2, $3, $4)',
+        [room.id, room.site_id, room.name, room.created_at]
+      );
+    }
+
+    // 3. Restore nodes
+    for (const node of backup.nodes) {
+      await client.query(
+        `INSERT INTO nodes (id, room_id, device_id, name, location, ip_address, tcp_port, sampling_interval, temp_high, temp_low, humidity_high, humidity_low, is_active, reboot_required, last_seen, notes, created_at, t1_name, t2_name, td_name, humidity_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+        [
+          node.id, node.room_id, node.device_id, node.name, node.location,
+          node.ip_address, node.tcp_port, node.sampling_interval,
+          node.temp_high, node.temp_low, node.humidity_high, node.humidity_low,
+          node.is_active, node.reboot_required, node.last_seen, node.notes, node.created_at,
+          node.t1_name || 'DS18 #1', node.t2_name || 'DS18 #2', node.td_name || 'DHT Temp', node.humidity_name || 'Humidity'
+        ]
+      );
+    }
+
+    // 4. Restore sensor data
+    for (const data of backup.sensor_data) {
+      await client.query(
+        'INSERT INTO sensor_data (id, node_id, t1, t2, td, humidity, recorded_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [data.id, data.node_id, data.t1, data.t2, data.td, data.humidity, data.recorded_at]
+      );
+    }
+
+    // 5. Restore SMTP settings if present in backup
+    if (backup.smtp_settings && backup.smtp_settings.length > 0) {
+      for (const smtp of backup.smtp_settings) {
+        await client.query(
+          'INSERT INTO smtp_settings (id, use_custom, host, port, user_email, password, secure, sender_name, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [smtp.id, smtp.use_custom, smtp.host, smtp.port, smtp.user_email, smtp.password, smtp.secure, smtp.sender_name, smtp.updated_at]
+        );
+      }
+    }
+
+    // 6. Restore scheduled reports if present in backup
+    if (backup.scheduled_reports && backup.scheduled_reports.length > 0) {
+      for (const report of backup.scheduled_reports) {
+        await client.query(
+          'INSERT INTO scheduled_reports (id, name, frequency, recipients, site_id, report_type, is_active, last_run, created_at, exclude_alerts) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+          [report.id, report.name, report.frequency, report.recipients, report.site_id, report.report_type, report.is_active, report.last_run, report.created_at, report.exclude_alerts || false]
+        );
+      }
+    }
+
+    // Reset SERIAL sequences
+    await client.query("SELECT setval('sites_id_seq', COALESCE((SELECT MAX(id)+1 FROM sites), 1), false)");
+    await client.query("SELECT setval('rooms_id_seq', COALESCE((SELECT MAX(id)+1 FROM rooms), 1), false)");
+    await client.query("SELECT setval('nodes_id_seq', COALESCE((SELECT MAX(id)+1 FROM nodes), 1), false)");
+    await client.query("SELECT setval('sensor_data_id_seq', COALESCE((SELECT MAX(id)+1 FROM sensor_data), 1), false)");
+    await client.query("SELECT setval('smtp_settings_id_seq', COALESCE((SELECT MAX(id)+1 FROM smtp_settings), 1), false)");
+    await client.query("SELECT setval('scheduled_reports_id_seq', COALESCE((SELECT MAX(id)+1 FROM scheduled_reports), 1), false)");
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Database successfully restored' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[SETTINGS] Database restore error:', err);
+    res.status(500).json({ error: 'Failed to restore database from backup', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/settings/diagnose - Run self-diagnostics
 router.get('/diagnose', authMiddleware, requireRole('admin'), async (req, res) => {
   try {

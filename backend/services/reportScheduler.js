@@ -74,13 +74,12 @@ async function runReport(s) {
 
     // Generate PDF if needed
     if (s.report_type === 'pdf' || s.report_type === 'both') {
-      // For scheduler, we need a way to get the PDF buffer.
-      // I'll modify generateReport to return buffer if no response object provided.
       const pdfBuffer = await generateReport({ 
         siteId: s.site_id, 
         startDate, 
         endDate, 
-        isInternal: true 
+        isInternal: true,
+        excludeAlerts: s.exclude_alerts
       });
       attachments.push({
         filename: `tempsense_report_${dateStr}.pdf`,
@@ -90,7 +89,7 @@ async function runReport(s) {
 
     // Generate CSV if needed
     if (s.report_type === 'csv' || s.report_type === 'both') {
-      const csvData = await getCSVData(s.site_id, startDate, endDate);
+      const csvData = await getCSVData(s.site_id, startDate, endDate, s.exclude_alerts);
       attachments.push({
         filename: `tempsense_report_${dateStr}.csv`,
         content: csvData
@@ -126,10 +125,11 @@ async function runReport(s) {
   }
 }
 
-async function getCSVData(siteId, startDate, endDate) {
+async function getCSVData(siteId, startDate, endDate, excludeAlerts) {
   const query = `
     SELECT sd.recorded_at, n.name as node_name, n.device_id, r.name as room_name,
-           sd.t1, sd.t2, sd.td, sd.humidity, n.temp_high, n.temp_low, n.humidity_high, n.humidity_low
+           sd.t1, sd.t2, sd.td, sd.humidity, n.temp_high, n.temp_low, n.humidity_high, n.humidity_low,
+           n.t1_name, n.t2_name, n.td_name, n.humidity_name
     FROM sensor_data sd
     JOIN nodes n ON sd.node_id = n.id
     JOIN rooms r ON n.room_id = r.id
@@ -138,7 +138,8 @@ async function getCSVData(siteId, startDate, endDate) {
   `;
   const result = await pool.query(query, [siteId, startDate, endDate]);
   
-  const mapped = result.rows.map(r => {
+  const csvData = [];
+  for (const r of result.rows) {
     const alerts = [];
     if (r.t1 > r.temp_high) alerts.push('T1 High');
     if (r.t1 < r.temp_low) alerts.push('T1 Low');
@@ -149,7 +150,11 @@ async function getCSVData(siteId, startDate, endDate) {
     if (r.humidity > r.humidity_high) alerts.push('Hum High');
     if (r.humidity < r.humidity_low) alerts.push('Hum Low');
 
-    return {
+    if (excludeAlerts && alerts.length > 0) {
+      continue;
+    }
+
+    csvData.push({
       Timestamp: new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
       Node: r.node_name,
       DeviceID: r.device_id,
@@ -159,8 +164,8 @@ async function getCSVData(siteId, startDate, endDate) {
       DHT: r.td !== null ? r.td.toFixed(2) : '',
       Humidity: r.humidity !== null ? r.humidity.toFixed(2) : '',
       Status: alerts.length > 0 ? alerts.join(', ') : 'Normal'
-    };
-  });
+    });
+  }
 
   const csvColumns = [
     { key: 'Timestamp', header: 'Timestamp' },
@@ -174,7 +179,7 @@ async function getCSVData(siteId, startDate, endDate) {
     { key: 'Status', header: 'Alerts/Status' },
   ];
 
-  return stringify(mapped, { header: true, columns: csvColumns });
+  return stringify(csvData, { header: true, columns: csvColumns });
 }
 
 module.exports = { startReportScheduler, runReport };

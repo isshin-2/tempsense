@@ -1,11 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ShieldAlert, KeyRound, Unlock, Loader2, Lock } from 'lucide-react';
-import { unlockServer } from '../services/api';
+import { unlockServer, fetchPublicCompanyName } from '../services/api';
 
 export default function SystemLockScreen({ onUnlocked }) {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [companyName, setCompanyName] = useState('Maxworth Techserv');
+
+  useEffect(() => {
+    fetchPublicCompanyName()
+      .then(data => {
+        if (data.companyName) setCompanyName(data.companyName);
+      })
+      .catch(err => console.error('Failed to load company name', err));
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -76,7 +85,7 @@ export default function SystemLockScreen({ onUnlocked }) {
         </form>
 
         <div className="lock-footer">
-          Maxworth Techserv • Secure Cold Chain Gateway
+          {companyName} • Secure Cold Chain Gateway
         </div>
       </div>
 

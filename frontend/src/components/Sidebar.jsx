@@ -60,7 +60,7 @@ export default function Sidebar() {
           <Thermometer size={24} style={{ color: '#3b82f6' }} />
           <div>
             <h1>TEMPSENSE</h1>
-            <span>Maxworth Techserv</span>
+            <span>{user?.companyName || 'Maxworth Techserv'}</span>
           </div>
         </div>
       </div>

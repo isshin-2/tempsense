@@ -1,20 +1,29 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { 
   fetchSMTP, updateSMTP, testSMTP,
-  fetchUpdateStatus, checkUpdates, installUpdate, saveUpdateConfig, runSystemDiagnostics
+  fetchUpdateStatus, checkUpdates, installUpdate, saveUpdateConfig, runSystemDiagnostics,
+  fetchNodes, updateNode, restoreDatabase, updateCompanyName
 } from '../services/api';
 import { 
   Mail, Shield, Save, Send, Loader2, CheckCircle, XCircle,
-  RefreshCw, GitBranch, Play, AlertCircle, Activity
+  RefreshCw, GitBranch, Play, AlertCircle, Activity,
+  Sliders, Database, Download, Upload, Building
 } from 'lucide-react';
 
 export default function SettingsPage() {
+  const { user, updateUser } = useAuth();
+  
   const [smtp, setSmtp] = useState({
     use_custom: false, host: '', port: 587, user_email: '', password: '', secure: false, sender_name: 'Tempsense Alerts'
   });
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: string }
+
+  // Organization settings
+  const [companyName, setCompanyName] = useState(user?.companyName || '');
+  const [companyLoading, setCompanyLoading] = useState(false);
 
   // Update states
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -28,6 +37,13 @@ export default function SettingsPage() {
   const [diagnosticsResults, setDiagnosticsResults] = useState(null);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Custom Sensor Naming States
+  const [nodes, setNodes] = useState([]);
+  const [customizingNode, setCustomizingNode] = useState(null);
+  const [customNames, setCustomNames] = useState({ t1Name: '', t2Name: '', tdName: '', humidityName: '' });
+
+  // Backup & Restore States
+  const [backupLoading, setBackupLoading] = useState(false);
 
   useEffect(() => {
     fetchSMTP().then(data => {
@@ -35,7 +51,21 @@ export default function SettingsPage() {
     }).catch(console.error);
 
     loadUpdateStatus();
+    loadNodes();
   }, []);
+
+  // Keep company name in sync with logged-in user context
+  useEffect(() => {
+    if (user?.companyName) {
+      setCompanyName(user.companyName);
+    }
+  }, [user]);
+
+  function loadNodes() {
+    fetchNodes()
+      .then(setNodes)
+      .catch(console.error);
+  }
 
   async function loadUpdateStatus() {
     setUpdateLoading(true);
@@ -47,6 +77,22 @@ export default function SettingsPage() {
       setUpdateError(err.message);
     } finally {
       setUpdateLoading(false);
+    }
+  }
+
+  async function handleSaveCompany(e) {
+    e.preventDefault();
+    if (!companyName.trim()) return;
+    setCompanyLoading(true);
+    setStatus(null);
+    try {
+      await updateCompanyName(companyName.trim());
+      updateUser({ ...user, companyName: companyName.trim() });
+      setStatus({ type: 'success', message: 'Organization name updated successfully!' });
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to update organization name' });
+    } finally {
+      setCompanyLoading(false);
     }
   }
 
@@ -98,44 +144,47 @@ export default function SettingsPage() {
     setDiagnosticsResults(null);
     
     try {
-      const res = await installUpdate();
-      setInstallStatus(res.message || 'Update installed successfully. Server is restarting...');
+      await installUpdate();
+      setInstallStatus('Updates applied. Restarting server...');
       
-      // Start polling for server health
-      setTimeout(() => {
-        setInstalling(false);
-        setRebooting(true);
-        pollServerHealth();
-      }, 2000);
+      // Enter polling/rebooting state
+      setRebooting(true);
+      setInstalling(false);
       
+      pollServerRestart();
     } catch (err) {
       setInstalling(false);
-      setStatus({ type: 'error', message: 'Failed to install updates: ' + err.message });
+      setStatus({ type: 'error', message: err.message || 'Failed to install update' });
     }
   }
 
-  async function pollServerHealth() {
-    const maxAttempts = 30;
-    let attempt = 0;
-    
+  function pollServerRestart() {
+    let attempts = 0;
     const interval = setInterval(async () => {
-      attempt++;
+      attempts++;
       try {
-        const res = await fetch('/api/health');
+        const res = await fetch((import.meta.env.VITE_API_URL || '') + '/api/health');
         if (res.ok) {
           clearInterval(interval);
           setRebooting(false);
-          setStatus({ type: 'success', message: 'Server successfully restarted!' });
-          handleRunDiagnostics();
+          setStatus({ type: 'success', message: 'Server updated and restarted successfully!' });
+          loadUpdateStatus();
+          loadNodes();
+          
+          // Run diagnostics automatically
+          setDiagnosing(true);
+          const diag = await runSystemDiagnostics();
+          setDiagnosticsResults(diag);
+          setDiagnosing(false);
         }
-      } catch (e) {
-        if (attempt >= maxAttempts) {
+      } catch (err) {
+        if (attempts > 30) {
           clearInterval(interval);
           setRebooting(false);
-          setStatus({ type: 'error', message: 'Server did not come back online in time. Please check backend logs.' });
+          setStatus({ type: 'error', message: 'Server took too long to restart. Please check backend status manually.' });
         }
       }
-    }, 1500);
+    }, 2000);
   }
 
   async function handleRunDiagnostics() {
@@ -145,12 +194,12 @@ export default function SettingsPage() {
       const data = await runSystemDiagnostics();
       setDiagnosticsResults(data);
       if (data.success) {
-        setStatus({ type: 'success', message: 'Self-diagnostics completed. All services healthy!' });
+        setStatus({ type: 'success', message: 'Self-diagnostics passed successfully!' });
       } else {
-        setStatus({ type: 'error', message: 'Self-diagnostics failed. Please check backend details below.' });
+        setStatus({ type: 'error', message: 'One or more diagnostic checks failed. View report below.' });
       }
     } catch (err) {
-      setStatus({ type: 'error', message: 'Diagnostics suite failed to run: ' + err.message });
+      setStatus({ type: 'error', message: err.message || 'Failed to run diagnostics' });
     } finally {
       setDiagnosing(false);
     }
@@ -164,7 +213,7 @@ export default function SettingsPage() {
       await updateSMTP(smtp);
       setStatus({ type: 'success', message: 'SMTP settings saved successfully' });
     } catch (err) {
-      setStatus({ type: 'error', message: err.message });
+      setStatus({ type: 'error', message: err.message || 'Failed to save SMTP settings' });
     } finally {
       setLoading(false);
     }
@@ -174,28 +223,119 @@ export default function SettingsPage() {
     setTesting(true);
     setStatus(null);
     try {
-      const res = await testSMTP();
-      setStatus({ type: 'success', message: res.message || 'Connection successful!' });
+      await testSMTP();
+      setStatus({ type: 'success', message: 'SMTP gateway tested successfully! Connection ok.' });
     } catch (err) {
-      setStatus({ type: 'error', message: err.message });
+      setStatus({ type: 'error', message: err.message || 'SMTP test failed. Check settings.' });
     } finally {
       setTesting(false);
     }
   }
 
+  // Customize Sensor Names
+  function handleCustomizeNode(node) {
+    setCustomizingNode(node);
+    setCustomNames({
+      t1Name: node.t1_name || 'DS18 #1',
+      t2Name: node.t2_name || 'DS18 #2',
+      tdName: node.td_name || 'DHT Temp',
+      humidityName: node.humidity_name || 'Humidity'
+    });
+  }
+
+  async function handleSaveCustomNames(e) {
+    e.preventDefault();
+    if (!customizingNode) return;
+    try {
+      await updateNode(customizingNode.id, {
+        t1Name: customNames.t1Name,
+        t2Name: customNames.t2Name,
+        tdName: customNames.tdName,
+        humidityName: customNames.humidityName
+      });
+      setStatus({ type: 'success', message: `Sensor names updated for node ${customizingNode.name}` });
+      setCustomizingNode(null);
+      loadNodes();
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to save sensor names' });
+    }
+  }
+
+  // Backup & Restore Actions
+  function handleDownloadBackup() {
+    const token = localStorage.getItem('tempsense_token');
+    const url = `${(import.meta.env.VITE_API_URL || '')}/api/settings/backup?token=${token}`;
+    window.open(url, '_blank');
+  }
+
+  async function handleRestoreBackup(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!window.confirm('⚠️ WARNING: Restoring a database backup will OVERWRITE all current sites, rooms, nodes, and temperature readings history. This action is irreversible.\n\nAre you sure you want to proceed?')) {
+      e.target.value = '';
+      return;
+    }
+
+    setBackupLoading(true);
+    setStatus(null);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const backupData = JSON.parse(event.target.result);
+        await restoreDatabase(backupData);
+        setStatus({ type: 'success', message: 'Database successfully restored from backup! Configuration and history updated.' });
+        loadNodes();
+      } catch (err) {
+        setStatus({ type: 'error', message: err.message || 'Failed to restore database from backup file.' });
+      } finally {
+        setBackupLoading(false);
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  }
+
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="settings-page container">
       <div className="page-header">
-        <h2>System Settings</h2>
-        <p>Configure global parameters and email services</p>
+        <div>
+          <h2>System Settings</h2>
+          <p className="text-muted">Configure notification relays, customize sensor naming, and manage database operations</p>
+        </div>
       </div>
 
-      <div className="card mt-24">
+      {/* Organization profile card */}
+      <div className="card mb-24">
+        <div className="flex items-center gap-3 mb-24">
+          <Building className="text-primary" size={24} />
+          <div>
+            <h3 className="m-0">Organization Profile</h3>
+            <p className="text-muted text-sm m-0">Customize your organization brand name displayed across the system</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveCompany}>
+          <div className="form-group">
+            <label>Organization / Company Name</label>
+            <input className="form-input" placeholder="e.g. Maxworth Techserv"
+              value={companyName} onChange={e => setCompanyName(e.target.value)} required />
+          </div>
+
+          <button className="btn btn-primary" type="submit" disabled={companyLoading} style={{ width: 'auto', marginTop: '12px' }}>
+            {companyLoading ? <Loader2 size={16} className="animate-spin mr-8" /> : <Save size={16} className="mr-8" />}
+            Update Organization Name
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
         <div className="flex items-center gap-3 mb-24">
           <Mail className="text-primary" size={24} />
           <div>
-            <h3 className="m-0">SMTP Email Configuration</h3>
-            <p className="text-muted text-sm m-0">Used for automated alerts and scheduled reports</p>
+            <h3 className="m-0">SMTP Configurations</h3>
+            <p className="text-muted text-sm m-0">Setup email server to send threshold alerts and scheduled PDF reports</p>
           </div>
         </div>
 
@@ -261,16 +401,16 @@ export default function SettingsPage() {
               lineHeight: 1.5,
               marginBottom: '24px'
             }}>
-              <strong style={{ display: 'block', color: 'var(--text-primary)', marginBottom: '4px' }}>System Default SMTP Enabled</strong>
-              The system is currently configured to send alerts and reports using the default, secure Maxworth Techserv email server. SMTP host credentials and passwords are kept hidden for security.
+              <strong style={{ block: 'block', color: 'var(--text-primary)', marginBottom: '4px' }}>System Default SMTP Enabled</strong>
+              The system is currently configured to send alerts and reports using the default, secure email server. SMTP host credentials and passwords are kept hidden for security.
             </div>
           )}
 
           {status && (
             <div className={`alert alert-${status.type} flex items-center gap-2 mb-16 p-12 rounded`} 
-                 style={{ backgroundColor: status.type === 'success' ? '#ecfdf5' : '#fef2f2', 
-                          color: status.type === 'success' ? '#065f46' : '#991b1b',
-                          border: `1px solid ${status.type === 'success' ? '#10b981' : '#f87171'}` }}>
+                 style={{ backgroundColor: status.type === 'success' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)', 
+                          color: status.type === 'success' ? '#10b981' : '#f87171',
+                          border: `1px solid ${status.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
               {status.type === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
               <span className="text-sm">{status.message}</span>
             </div>
@@ -289,6 +429,86 @@ export default function SettingsPage() {
         </form>
       </div>
 
+      {/* Sensor Name Customizations Panel */}
+      <div className="card mt-24">
+        <div className="flex items-center gap-3 mb-24">
+          <Sliders className="text-primary" size={24} />
+          <div>
+            <h3 className="m-0">Sensor Naming Customizations</h3>
+            <p className="text-muted text-sm m-0">Rename default sensor parameters (T1, T2, DHT, etc.) to physical zone labels per node</p>
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
+                <th style={{ padding: '10px 8px' }}>Node Name</th>
+                <th style={{ padding: '10px 8px' }}>DS18 Probe #1</th>
+                <th style={{ padding: '10px 8px' }}>DS18 Probe #2</th>
+                <th style={{ padding: '10px 8px' }}>DHT Temperature</th>
+                <th style={{ padding: '10px 8px' }}>Humidity</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map(node => (
+                <tr key={node.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td style={{ padding: '10px 8px', fontWeight: 600 }}>{node.name}</td>
+                  <td style={{ padding: '10px 8px' }}>{node.t1_name || 'DS18 #1'}</td>
+                  <td style={{ padding: '10px 8px' }}>{node.t2_name || 'DS18 #2'}</td>
+                  <td style={{ padding: '10px 8px' }}>{node.td_name || 'DHT Temp'}</td>
+                  <td style={{ padding: '10px 8px' }}>{node.humidity_name || 'Humidity'}</td>
+                  <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                    <button className="btn btn-ghost" type="button" 
+                      onClick={() => handleCustomizeNode(node)} 
+                      style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-block', width: 'auto', border: '1px solid var(--border-subtle)' }}>
+                      Rename
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {nodes.length === 0 && (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                    No nodes configured yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Database Backup & Restore Panel */}
+      <div className="card mt-24">
+        <div className="flex items-center gap-3 mb-24">
+          <Database className="text-primary" size={24} />
+          <div>
+            <h3 className="m-0">Database Backup &amp; Restore</h3>
+            <p className="text-muted text-sm m-0">Download database backups or import settings and logs from a backup file</p>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted" style={{ lineHeight: 1.5, margin: '0 0 20px 0' }}>
+          Database backups contain all facilities (sites), chambers (rooms), configured IoT nodes, and complete historical sensor readings. The data is exported and imported cleanly as a JSON payload.
+        </p>
+
+        <div className="flex gap-12 mt-20" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="btn btn-primary" type="button" onClick={handleDownloadBackup} style={{ width: 'auto' }}>
+            <Download size={16} className="mr-8" />
+            Download Database Backup
+          </button>
+          
+          <label className="btn btn-ghost" style={{ width: 'auto', border: '1px solid var(--border-subtle)', background: 'transparent', cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center' }}>
+            {backupLoading ? <Loader2 size={16} className="animate-spin mr-8" /> : <Upload size={16} className="mr-8" />}
+            {backupLoading ? 'Restoring...' : 'Restore from Backup file'}
+            <input type="file" accept=".json" onChange={handleRestoreBackup} disabled={backupLoading} style={{ display: 'none' }} />
+          </label>
+        </div>
+      </div>
+
+      {/* Updates and Diagnostics Panel */}
       <div className="card mt-24">
         <div className="flex items-center gap-3 mb-24">
           <RefreshCw className="text-primary" size={24} />
@@ -499,6 +719,64 @@ export default function SettingsPage() {
           SMTP passwords are stored encrypted in the database. Ensure you use App Passwords for services like Gmail for better security.
         </p>
       </div>
+
+      {/* Customize Sensor Names Modal Overlay */}
+      {customizingNode && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="modal-card card" style={{
+            width: '100%',
+            maxWidth: '480px',
+            background: 'var(--bg-card)',
+            padding: '24px',
+            borderRadius: '12px',
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Customize Sensor Labels</h3>
+            <p className="text-muted text-sm" style={{ marginBottom: '16px' }}>
+              Rename parameter sensors for node <strong>{customizingNode.name}</strong> (Device #{customizingNode.device_id})
+            </p>
+            
+            <form onSubmit={handleSaveCustomNames}>
+              <div className="form-group">
+                <label>DS18 Probe #1 Name</label>
+                <input className="form-input" value={customNames.t1Name} 
+                  onChange={e => setCustomNames({ ...customNames, t1Name: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label>DS18 Probe #2 Name</label>
+                <input className="form-input" value={customNames.t2Name} 
+                  onChange={e => setCustomNames({ ...customNames, t2Name: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label>DHT Temperature Name</label>
+                <input className="form-input" value={customNames.tdName} 
+                  onChange={e => setCustomNames({ ...customNames, tdName: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label>Humidity Sensor Name</label>
+                <input className="form-input" value={customNames.humidityName} 
+                  onChange={e => setCustomNames({ ...customNames, humidityName: e.target.value })} required />
+              </div>
+
+              <div className="flex gap-12 mt-24">
+                <button className="btn btn-primary" type="submit" style={{ width: 'auto' }}>Save Changes</button>
+                <button className="btn btn-ghost" type="button" onClick={() => setCustomizingNode(null)} style={{ width: 'auto' }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

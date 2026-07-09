@@ -16,6 +16,7 @@ export default function ReportsPage() {
     nodeId: '',
     startDate: new Date(Date.now() - 86400000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
+    excludeAlerts: false,
   });
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function ReportsPage() {
         startDate: filters.startDate,
         endDate: filters.endDate + 'T23:59:59',
         limit: 500,
+        excludeAlerts: filters.excludeAlerts,
       });
       setHistory(data.reverse());
     } catch (err) {
@@ -61,6 +63,7 @@ export default function ReportsPage() {
       nodeId: filters.nodeId || '',
       startDate: filters.startDate,
       endDate: filters.endDate + 'T23:59:59',
+      excludeAlerts: filters.excludeAlerts,
     });
   }
 
@@ -72,6 +75,7 @@ export default function ReportsPage() {
       nodeId: filters.nodeId || '',
       startDate: filters.startDate,
       endDate: filters.endDate + 'T23:59:59',
+      excludeAlerts: filters.excludeAlerts,
     });
   }
 
@@ -83,6 +87,13 @@ export default function ReportsPage() {
     DHT: r.td,
     Humidity: r.humidity,
   }));
+
+  // Resolve dynamic sensor names if a node is selected (or use defaults)
+  const selectedNodeObj = nodes.find(n => String(n.id) === String(filters.nodeId));
+  const t1Label = selectedNodeObj?.t1_name || 'DS18 #1';
+  const t2Label = selectedNodeObj?.t2_name || 'DS18 #2';
+  const tdLabel = selectedNodeObj?.td_name || 'DHT Temp';
+  const humLabel = selectedNodeObj?.humidity_name || 'Humidity';
 
   return (
     <>
@@ -128,6 +139,13 @@ export default function ReportsPage() {
             <input className="form-input" type="date" value={filters.endDate}
               onChange={(e) => setFilters({ ...filters, endDate: e.target.value })} />
           </div>
+          <div className="form-group flex items-center gap-2" style={{ margin: 0, alignSelf: 'end', paddingBottom: '8px' }}>
+            <input type="checkbox" id="excludeAlerts" checked={filters.excludeAlerts}
+              onChange={(e) => setFilters({ ...filters, excludeAlerts: e.target.checked })} />
+            <label htmlFor="excludeAlerts" style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 600, userSelect: 'none' }}>
+              Exclude Breaches
+            </label>
+          </div>
         </div>
 
         <div className="flex gap-12 mb-16">
@@ -156,10 +174,10 @@ export default function ReportsPage() {
                   labelStyle={{ color: 'var(--text-primary)' }}
                 />
                 <Legend />
-                <Line type="monotone" dataKey="T1" stroke="#3b82f6" strokeWidth={2} dot={false} name="DS18 #1" />
-                <Line type="monotone" dataKey="T2" stroke="#06b6d4" strokeWidth={2} dot={false} name="DS18 #2" />
-                <Line type="monotone" dataKey="DHT" stroke="#f59e0b" strokeWidth={2} dot={false} name="DHT Temp" />
-                <Line type="monotone" dataKey="Humidity" stroke="#8b5cf6" strokeWidth={2} dot={false} name="Humidity %" />
+                <Line type="monotone" dataKey="T1" stroke="#3b82f6" strokeWidth={2} dot={false} name={t1Label} />
+                <Line type="monotone" dataKey="T2" stroke="#06b6d4" strokeWidth={2} dot={false} name={t2Label} />
+                <Line type="monotone" dataKey="DHT" stroke="#f59e0b" strokeWidth={2} dot={false} name={tdLabel} />
+                <Line type="monotone" dataKey="Humidity" stroke="#8b5cf6" strokeWidth={2} dot={false} name={`${humLabel} %`} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -178,10 +196,10 @@ export default function ReportsPage() {
                     <th>Timestamp</th>
                     <th>Node</th>
                     <th>Room</th>
-                    <th>T1 °C</th>
-                    <th>T2 °C</th>
-                    <th>DHT °C</th>
-                    <th>Humidity %</th>
+                    <th>{t1Label} °C</th>
+                    <th>{t2Label} °C</th>
+                    <th>{tdLabel} °C</th>
+                    <th>{humLabel} %</th>
                   </tr>
                 </thead>
                 <tbody>

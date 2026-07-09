@@ -75,7 +75,7 @@ if %errorlevel% neq 0 (
     echo   ║                                                      ║
     echo   ║  Check the error messages above for details.        ║
     echo   ║  Common fixes:                                       ║
-    echo   ║  - Ensure ports 80, 3001, 5432, 8080 are free       ║
+    echo   ║  - Ensure ports 81, 3001, 5432, 8080 are free       ║
     echo   ║  - Run: docker-compose down --volumes              ║
     echo   ║  - Then try this script again                       ║
     echo   ╚══════════════════════════════════════════════════════╝
@@ -131,7 +131,7 @@ echo         Backend is healthy  [OK]
 ::  STEP 4: Open Browser
 :: ============================================================
 echo   [4/4] Opening browser...
-start "" http://localhost
+start "" http://localhost:81
 echo         Browser opened  [OK]
 
 :: ============================================================
@@ -147,7 +147,7 @@ echo  ================================================================
 echo.
 echo   SERVICES:
 echo   ---------
-echo   Web Dashboard    :  http://localhost           (Port 80)
+echo   Web Dashboard    :  http://localhost:81           (Port 81)
 echo   API Server       :  http://localhost:3001
 echo   Health Check     :  http://localhost:3001/api/health
 echo   Database GUI     :  http://localhost:8080      (Adminer)

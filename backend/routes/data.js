@@ -87,14 +87,15 @@ router.get('/history', authMiddleware, async (req, res) => {
 // GET /api/data/export/csv?siteId=&startDate=&endDate=
 router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
-    const { siteId, roomId, nodeId, startDate, endDate } = req.query;
+    const { siteId, roomId, nodeId, startDate, endDate, excludeAlerts } = req.query;
     if (!siteId || !startDate || !endDate) {
       return res.status(400).json({ error: 'siteId, startDate, and endDate are required' });
     }
 
     let query = `
       SELECT sd.recorded_at, n.name as node_name, n.device_id, r.name as room_name,
-             sd.t1, sd.t2, sd.td, sd.humidity, n.temp_high, n.temp_low, n.humidity_high, n.humidity_low
+             sd.t1, sd.t2, sd.td, sd.humidity, n.temp_high, n.temp_low, n.humidity_high, n.humidity_low,
+             n.t1_name, n.t2_name, n.td_name, n.humidity_name
       FROM sensor_data sd
       JOIN nodes n ON sd.node_id = n.id
       JOIN rooms r ON n.room_id = r.id
@@ -114,20 +115,22 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
     query += ' ORDER BY sd.recorded_at ASC';
 
     const result = await pool.query(query, params);
+    const firstRow = result.rows[0];
 
     const csvColumns = [
       { key: 'Timestamp', header: 'Timestamp' },
       { key: 'Node', header: 'Node' },
       { key: 'DeviceID', header: 'DeviceID' },
       { key: 'Room', header: 'Room' },
-      { key: 'T1', header: 'T1 (°C)' },
-      { key: 'T2', header: 'T2 (°C)' },
-      { key: 'DHT', header: 'DHT Temp (°C)' },
-      { key: 'Humidity', header: 'Humidity (%)' },
+      { key: 'T1', header: nodeId && firstRow ? `${firstRow.t1_name || 'T1'} (°C)` : 'T1 (°C)' },
+      { key: 'T2', header: nodeId && firstRow ? `${firstRow.t2_name || 'T2'} (°C)` : 'T2 (°C)' },
+      { key: 'DHT', header: nodeId && firstRow ? `${firstRow.td_name || 'DHT Temp'} (°C)` : 'DHT Temp (°C)' },
+      { key: 'Humidity', header: nodeId && firstRow ? `${firstRow.humidity_name || 'Humidity'} (%)` : 'Humidity (%)' },
       { key: 'Status', header: 'Alerts/Status' },
     ];
 
-    const csvData = result.rows.map(r => {
+    const csvData = [];
+    for (const r of result.rows) {
       const alerts = [];
       if (r.t1 > r.temp_high) alerts.push('T1 High');
       if (r.t1 < r.temp_low) alerts.push('T1 Low');
@@ -138,7 +141,11 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
       if (r.humidity > r.humidity_high) alerts.push('Hum High');
       if (r.humidity < r.humidity_low) alerts.push('Hum Low');
 
-      return {
+      if (excludeAlerts === 'true' && alerts.length > 0) {
+        continue;
+      }
+
+      csvData.push({
         Timestamp: new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         Node: r.node_name,
         DeviceID: r.device_id,
@@ -148,8 +155,8 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
         DHT: r.td !== null ? r.td.toFixed(2) : '',
         Humidity: r.humidity !== null ? r.humidity.toFixed(2) : '',
         Status: alerts.length > 0 ? alerts.join(', ') : 'Normal'
-      };
-    });
+      });
+    }
 
     const filename = `tempsense_report_${new Date().toISOString().split('T')[0]}.csv`;
     const csv = stringify(csvData, { header: true, columns: csvColumns });
@@ -165,11 +172,11 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
 // GET /api/data/export/pdf?siteId=&startDate=&endDate=
 router.get('/export/pdf', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
-    const { siteId, roomId, nodeId, startDate, endDate } = req.query;
+    const { siteId, roomId, nodeId, startDate, endDate, excludeAlerts } = req.query;
     if (!siteId || !startDate || !endDate) {
       return res.status(400).json({ error: 'siteId, startDate, and endDate are required' });
     }
-    await generateReport({ siteId, roomId, nodeId, startDate, endDate }, res);
+    await generateReport({ siteId, roomId, nodeId, startDate, endDate, excludeAlerts: excludeAlerts === 'true' }, res);
   } catch (err) {
     console.error('[DATA] PDF export error:', err);
     res.status(500).json({ error: 'Server error' });
