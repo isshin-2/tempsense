@@ -446,4 +446,55 @@ export async function restoreDatabase(backupData) {
   return json;
 }
 
+export async function fetchGDriveSettings() {
+  const res = await fetch(`${API_BASE}/settings/gdrive`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch Google Drive settings');
+  return res.json();
+}
+
+export async function saveGDriveSettings(data) {
+  const res = await fetch(`${API_BASE}/settings/gdrive`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to save Google Drive settings');
+  return res.json();
+}
+
+export async function getGDriveAuthUrl(redirectUri) {
+  const res = await fetch(`${API_BASE}/settings/gdrive/auth-url`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ redirectUri }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to get auth URL');
+  return json;
+}
+
+export async function exchangeGDriveCode(code, redirectUri) {
+  const res = await fetch(`${API_BASE}/settings/gdrive/exchange`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ code, redirectUri }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to connect Google account');
+  return json;
+}
+
+export async function syncGDriveNow() {
+  const res = await fetch(`${API_BASE}/settings/gdrive/sync`, { method: 'POST', headers: authHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Backup synchronization failed');
+  return json;
+}
+
+export async function disconnectGDrive() {
+  const res = await fetch(`${API_BASE}/settings/gdrive/disconnect`, { method: 'POST', headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to disconnect Google account');
+  return res.json();
+}
+
 

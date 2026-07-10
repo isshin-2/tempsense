@@ -3,12 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { 
   fetchSMTP, updateSMTP, testSMTP,
   fetchUpdateStatus, checkUpdates, installUpdate, saveUpdateConfig, runSystemDiagnostics,
-  fetchNodes, updateNode, restoreDatabase, updateCompanyName
+  fetchNodes, updateNode, restoreDatabase, updateCompanyName,
+  fetchGDriveSettings, saveGDriveSettings, getGDriveAuthUrl, exchangeGDriveCode, syncGDriveNow, disconnectGDrive
 } from '../services/api';
 import { 
   Mail, Shield, Save, Send, Loader2, CheckCircle, XCircle,
   RefreshCw, GitBranch, Play, AlertCircle, Activity,
-  Sliders, Database, Download, Upload, Building
+  Sliders, Database, Download, Upload, Building, Cloud
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -19,7 +20,7 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: string }
+  const [status, setStatus] = useState(null); // { type: 'success' | 'error' | 'info', message: string }
 
   // Organization settings
   const [companyName, setCompanyName] = useState(user?.companyName || '');
@@ -45,6 +46,14 @@ export default function SettingsPage() {
   // Backup & Restore States
   const [backupLoading, setBackupLoading] = useState(false);
 
+  // Google Drive Sync States
+  const [gdrive, setGDrive] = useState({
+    use_sync: false, client_id: '', client_secret: '', folder_id: '', last_sync: '', last_status: '', is_connected: false
+  });
+  const [gdriveLoading, setGDriveLoading] = useState(false);
+  const [gdriveSaving, setGDriveSaving] = useState(false);
+  const [gdriveSyncing, setGDriveSyncing] = useState(false);
+
   // Active settings tab state
   const [activeTab, setActiveTab] = useState('general');
 
@@ -53,6 +62,7 @@ export default function SettingsPage() {
     { id: 'smtp', label: 'Alerts & SMTP', icon: <Mail size={18} /> },
     { id: 'sensors', label: 'Sensor Naming', icon: <Sliders size={18} /> },
     { id: 'backup', label: 'Backup & Restore', icon: <Database size={18} /> },
+    { id: 'gdrive', label: 'Google Drive Sync', icon: <Cloud size={18} /> },
     { id: 'updates', label: 'Updates & Health', icon: <RefreshCw size={18} /> },
   ];
 
@@ -63,6 +73,14 @@ export default function SettingsPage() {
 
     loadUpdateStatus();
     loadNodes();
+    loadGDriveSettings();
+    
+    // Parse redirect code parameters from Google OAuth redirection
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      handleGDriveCallback(code);
+    }
   }, []);
 
   // Keep company name in sync with logged-in user context
@@ -76,6 +94,35 @@ export default function SettingsPage() {
     fetchNodes()
       .then(setNodes)
       .catch(console.error);
+  }
+
+  async function loadGDriveSettings() {
+    setGDriveLoading(true);
+    try {
+      const data = await fetchGDriveSettings();
+      setGDrive(data);
+    } catch (err) {
+      console.error('Failed to load Google Drive settings:', err);
+    } finally {
+      setGDriveLoading(false);
+    }
+  }
+
+  async function handleGDriveCallback(code) {
+    setActiveTab('gdrive');
+    setStatus({ type: 'info', message: 'Connecting Google Account...' });
+    try {
+      const redirectUri = window.location.origin + window.location.pathname;
+      await exchangeGDriveCode(code, redirectUri);
+      setStatus({ type: 'success', message: 'Google account connected successfully!' });
+      
+      // Clean up URL query parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+      loadGDriveSettings();
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to exchange authorization code' });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }
 
   async function loadUpdateStatus() {
@@ -273,10 +320,31 @@ export default function SettingsPage() {
   }
 
   // Backup & Restore Actions
-  function handleDownloadBackup() {
-    const token = localStorage.getItem('tempsense_token');
-    const url = `${(import.meta.env.VITE_API_URL || '')}/api/settings/backup?token=${token}`;
-    window.open(url, '_blank');
+  async function handleDownloadBackup() {
+    setStatus(null);
+    try {
+      const token = localStorage.getItem('tempsense_token');
+      const res = await fetch(`${(import.meta.env.VITE_API_URL || '')}/api/settings/backup`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error('Failed to generate database backup');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `tempsense_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setStatus({ type: 'success', message: 'Database backup downloaded successfully!' });
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to download backup' });
+    }
   }
 
   async function handleRestoreBackup(e) {
@@ -308,6 +376,69 @@ export default function SettingsPage() {
     reader.readAsText(file);
   }
 
+  // Google Drive Handlers
+  async function handleSaveGDrive(e) {
+    e.preventDefault();
+    setGDriveSaving(true);
+    setStatus(null);
+    try {
+      await saveGDriveSettings({
+        use_sync: gdrive.use_sync,
+        client_id: gdrive.client_id,
+        client_secret: gdrive.client_secret,
+        folder_id: gdrive.folder_id
+      });
+      setStatus({ type: 'success', message: 'Google Drive settings updated successfully!' });
+      loadGDriveSettings();
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to save Google Drive configuration' });
+    } finally {
+      setGDriveSaving(false);
+    }
+  }
+
+  async function handleConnectGDrive() {
+    if (!gdrive.client_id) {
+      return alert('Please configure and save your Google OAuth Client ID first.');
+    }
+    setStatus(null);
+    try {
+      const redirectUri = window.location.origin + window.location.pathname;
+      const { url } = await getGDriveAuthUrl(redirectUri);
+      window.location.href = url;
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to generate connection URL' });
+    }
+  }
+
+  async function handleDisconnectGDrive() {
+    if (!window.confirm('Are you sure you want to disconnect your Google account and disable auto backup sync?')) {
+      return;
+    }
+    setStatus(null);
+    try {
+      await disconnectGDrive();
+      setStatus({ type: 'success', message: 'Google Account disconnected successfully!' });
+      loadGDriveSettings();
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Failed to disconnect account' });
+    }
+  }
+
+  async function handleSyncGDriveNow() {
+    setGDriveSyncing(true);
+    setStatus(null);
+    try {
+      await syncGDriveNow();
+      setStatus({ type: 'success', message: 'Database backup synchronized successfully to Google Drive!' });
+      loadGDriveSettings();
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message || 'Manual backup upload failed' });
+    } finally {
+      setGDriveSyncing(false);
+    }
+  }
+
   return (
     <div className="settings-page container" style={{ maxWidth: '1000px', margin: '0 auto' }}>
       <div className="page-header" style={{ marginBottom: '24px' }}>
@@ -320,12 +451,12 @@ export default function SettingsPage() {
       {status && (
         <div className={`alert alert-${status.type} flex items-center gap-2 mb-24 p-12`} 
              style={{ 
-               backgroundColor: status.type === 'success' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)', 
-               color: status.type === 'success' ? '#10b981' : '#f87171',
-               border: `1px solid ${status.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+               backgroundColor: status.type === 'success' ? 'rgba(16, 185, 129, 0.08)' : status.type === 'info' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(239, 68, 68, 0.08)', 
+               color: status.type === 'success' ? '#10b981' : status.type === 'info' ? '#3b82f6' : '#f87171',
+               border: `1px solid ${status.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : status.type === 'info' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
                borderRadius: '8px'
              }}>
-          {status.type === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
+          {status.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
           <span className="text-sm" style={{ fontWeight: 500 }}>{status.message}</span>
         </div>
       )}
@@ -585,10 +716,156 @@ export default function SettingsPage() {
                     
                     <label className="btn btn-ghost" style={{ width: 'auto', border: '1px solid var(--border-subtle)', background: 'transparent', cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center' }}>
                       {backupLoading ? <Loader2 size={16} className="animate-spin mr-8" /> : <Upload size={16} className="mr-8" />}
-                      {backupLoading ? 'Restoring...' : 'Restore from Backup file'}
+                      {backupLoading ? 'Restore Backup' : 'Restore from Backup file'}
                       <input type="file" accept=".json" onChange={handleRestoreBackup} disabled={backupLoading} style={{ display: 'none' }} />
                     </label>
                   </div>
+                </div>
+              )}
+
+              {/* Tab: Google Drive Sync */}
+              {activeTab === 'gdrive' && (
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="flex items-center gap-3 mb-24">
+                    <Cloud className="text-primary" size={24} />
+                    <div>
+                      <h3 className="m-0">Google Drive Backup Sync</h3>
+                      <p className="text-muted text-sm m-0">Synchronize database backup snapshots to Google Drive automatically</p>
+                    </div>
+                  </div>
+
+                  {gdriveLoading ? (
+                    <div className="flex items-center justify-center p-24">
+                      <Loader2 className="animate-spin text-primary" size={32} />
+                    </div>
+                  ) : (
+                    <div>
+                      <form onSubmit={handleSaveGDrive}>
+                        <div style={{ background: 'rgba(255,255,255,0.01)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-subtle)', marginBottom: '24px' }}>
+                          <h4 style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-primary)' }}>1. Configure OAuth 2.0 Credentials</h4>
+                          <p className="text-xs text-muted mb-16">
+                            Create OAuth client credentials in your Google Cloud Console. Set authorization type to <strong>Web Application</strong>.
+                          </p>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div className="form-group">
+                              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Google Client ID</label>
+                              <input className="form-input" placeholder="e.g. 123456-abcdef.apps.googleusercontent.com"
+                                value={gdrive.client_id} onChange={e => setGDrive({ ...gdrive, client_id: e.target.value })} required />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Google Client Secret</label>
+                              <input className="form-input" type="password" placeholder={gdrive.is_connected ? '••••••••••••••••' : 'Enter client secret'}
+                                value={gdrive.client_secret || ''} onChange={e => setGDrive({ ...gdrive, client_secret: e.target.value })} />
+                              {gdrive.is_connected && <p className="text-xs text-muted mt-4">Leave secret blank if you don't want to change it.</p>}
+                            </div>
+                          </div>
+
+                          <div style={{
+                            background: 'rgba(59, 130, 246, 0.05)',
+                            padding: '12px 16px',
+                            borderRadius: '8px',
+                            fontSize: '12.5px',
+                            color: 'var(--text-secondary)',
+                            lineHeight: 1.5,
+                            marginTop: '16px'
+                          }}>
+                            <strong>Redirect URI Configuration:</strong> In your Google Cloud project console, set the Authorized Redirect URI exactly to:<br />
+                            <code style={{ background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '6px', fontFamily: 'monospace', fontSize: '11px' }}>
+                              {window.location.origin + window.location.pathname}
+                            </code>
+                          </div>
+                        </div>
+
+                        <div style={{ background: 'rgba(255,255,255,0.01)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-subtle)', marginBottom: '24px' }}>
+                          <h4 style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-primary)' }}>2. Google Account Connection</h4>
+                          
+                          {gdrive.is_connected ? (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#22c55e', fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>
+                                <CheckCircle size={18} />
+                                Google Account Connected
+                              </div>
+                              <button className="btn btn-ghost" type="button" onClick={handleDisconnectGDrive} style={{ width: 'auto', color: '#ef4444', borderColor: '#ef4444' }}>
+                                Disconnect Account
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-sm text-muted mb-16">Provide OAuth credentials, save configuration, then authorize access to Google Drive.</p>
+                              <button className="btn btn-primary" type="button" onClick={handleConnectGDrive} disabled={!gdrive.client_id} style={{ width: 'auto' }}>
+                                Connect Google Account
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {gdrive.is_connected && (
+                          <div style={{ background: 'rgba(255,255,255,0.01)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-subtle)', marginBottom: '24px' }}>
+                            <h4 style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-primary)' }}>3. Sync Configurations</h4>
+                            
+                            <div className="form-group flex items-center gap-2 mb-20">
+                              <input type="checkbox" id="gdriveUseSync" 
+                                checked={gdrive.use_sync}
+                                onChange={e => setGDrive({ ...gdrive, use_sync: e.target.checked })}
+                              />
+                              <label htmlFor="gdriveUseSync" style={{ fontWeight: 600, fontSize: '13.5px', cursor: 'pointer', userSelect: 'none' }}>
+                                Enable Nightly Database Auto Backup Sync
+                              </label>
+                            </div>
+
+                            <div className="form-group">
+                              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Target Folder ID (Optional)</label>
+                              <input className="form-input" placeholder="Enter Folder ID (leave blank to upload to root)"
+                                value={gdrive.folder_id} onChange={e => setGDrive({ ...gdrive, folder_id: e.target.value })} />
+                              <p className="text-xs text-muted mt-4">The long ID string visible at the end of your Google Drive folder's URL.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-12 mt-24">
+                          <button className="btn btn-primary" type="submit" disabled={gdriveSaving} style={{ width: 'auto' }}>
+                            {gdriveSaving ? <Loader2 size={16} className="animate-spin mr-8" /> : <Save size={16} className="mr-8" />}
+                            Save Configurations
+                          </button>
+
+                          {gdrive.is_connected && (
+                            <button className="btn btn-ghost" type="button" onClick={handleSyncGDriveNow} disabled={gdriveSyncing} style={{ width: 'auto', border: '1px solid var(--border-subtle)' }}>
+                              {gdriveSyncing ? <Loader2 size={16} className="animate-spin mr-8" /> : <RefreshCw size={16} className="mr-8" />}
+                              Sync Backup Now
+                            </button>
+                          )}
+                        </div>
+                      </form>
+
+                      {/* Sync History / Log */}
+                      {gdrive.is_connected && (gdrive.last_sync || gdrive.last_status) && (
+                        <div style={{
+                          marginTop: '24px',
+                          padding: '16px 20px',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.01)',
+                          border: '1px solid var(--border-subtle)',
+                          fontSize: '13px'
+                        }}>
+                          <h4 style={{ margin: '0 0 12px 0', fontSize: '13.5px', color: 'var(--text-primary)' }}>Last Sync Status</h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div>
+                              <strong className="text-muted">Last Upload:</strong>{' '}
+                              {gdrive.last_sync ? new Date(gdrive.last_sync).toLocaleString() : 'Never'}
+                            </div>
+                            <div>
+                              <strong className="text-muted">Status Message:</strong>{' '}
+                              <span style={{
+                                color: gdrive.last_status === 'Success' || gdrive.last_status === 'Connected' ? '#22c55e' : '#ef4444',
+                                fontWeight: 600
+                              }}>{gdrive.last_status || 'None'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

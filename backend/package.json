@@ -17,6 +17,7 @@
     "csv-stringify": "^6.7.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "googleapis": "^173.0.0",
     "jsonwebtoken": "^9.0.3",
     "multicast-dns": "^7.2.5",
     "nodemailer": "^8.0.7",

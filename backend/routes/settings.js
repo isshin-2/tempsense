@@ -418,14 +418,134 @@ router.post('/restore', authMiddleware, requireRole('admin'), async (req, res) =
   }
 });
 
-// GET /api/settings/diagnose - Run self-diagnostics
-router.get('/diagnose', authMiddleware, requireRole('admin'), async (req, res) => {
+// GET /api/settings/gdrive - Fetch Google Drive sync configuration
+router.get('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const diagnostics = await runDiagnostics();
-    res.json(diagnostics);
+    const result = await pool.query('SELECT use_sync, client_id, folder_id, last_sync, last_status FROM gdrive_settings LIMIT 1');
+    if (result.rows.length === 0) {
+      return res.json({ use_sync: false });
+    }
+    const r = result.rows[0];
+    const connCheck = await pool.query('SELECT refresh_token FROM gdrive_settings WHERE id = 1');
+    res.json({
+      use_sync: r.use_sync === true,
+      client_id: r.client_id || '',
+      folder_id: r.folder_id || '',
+      last_sync: r.last_sync,
+      last_status: r.last_status,
+      is_connected: !!(connCheck.rows[0]?.refresh_token)
+    });
   } catch (err) {
-    console.error('[SETTINGS] GET Diagnose error:', err);
-    res.status(500).json({ error: 'Diagnostics suite execution failed', details: err.message });
+    console.error('[SETTINGS] GET Google Drive error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/settings/gdrive - Update Google Drive sync configuration
+router.post('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const { use_sync, client_id, client_secret, folder_id } = req.body;
+    
+    // Fetch existing settings to avoid overwriting client_secret with empty value if not supplied
+    const current = await pool.query('SELECT client_id, client_secret, refresh_token FROM gdrive_settings WHERE id = 1');
+    const existingSecret = current.rows[0]?.client_secret || '';
+    const secretToSave = client_secret ? client_secret.trim() : existingSecret;
+
+    // If client_id is changed, clear refresh_token to require re-auth
+    const existingClientId = current.rows[0]?.client_id || '';
+    let refreshToken = current.rows[0]?.refresh_token || '';
+    if (client_id && client_id.trim() !== existingClientId) {
+      refreshToken = '';
+    }
+
+    await pool.query(
+      `UPDATE gdrive_settings SET 
+        use_sync = $1, 
+        client_id = $2, 
+        client_secret = $3, 
+        folder_id = $4,
+        refresh_token = $5,
+        updated_at = NOW()
+       WHERE id = 1`,
+      [use_sync === true, client_id ? client_id.trim() : '', secretToSave, folder_id ? folder_id.trim() : '', refreshToken]
+    );
+
+    res.json({ success: true, message: 'Google Drive settings updated successfully' });
+  } catch (err) {
+    console.error('[SETTINGS] POST Google Drive error:', err);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+const gdriveService = require('../services/gdriveService');
+
+// POST /api/settings/gdrive/auth-url - Get Google consent page URL
+router.post('/gdrive/auth-url', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const { redirectUri } = req.body;
+    if (!redirectUri) {
+      return res.status(400).json({ error: 'redirectUri is required' });
+    }
+    const url = await gdriveService.getAuthUrl(redirectUri);
+    res.json({ url });
+  } catch (err) {
+    console.error('[SETTINGS] Auth URL error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate consent URL' });
+  }
+});
+
+// POST /api/settings/gdrive/exchange - Exchange code for refresh token
+router.post('/gdrive/exchange', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const { code, redirectUri } = req.body;
+    if (!code || !redirectUri) {
+      return res.status(400).json({ error: 'code and redirectUri are required' });
+    }
+    const result = await gdriveService.exchangeCode(code, redirectUri);
+    res.json(result);
+  } catch (err) {
+    console.error('[SETTINGS] Token exchange error:', err);
+    res.status(500).json({ error: err.message || 'Failed to exchange authorization code' });
+  }
+});
+
+// POST /api/settings/gdrive/test - Test connection
+router.post('/gdrive/test', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await gdriveService.testConnection();
+    res.json(result);
+  } catch (err) {
+    console.error('[SETTINGS] Test connection error:', err);
+    res.status(500).json({ error: err.message || 'Connection test failed' });
+  }
+});
+
+// POST /api/settings/gdrive/sync - Manually trigger database backup to Google Drive
+router.post('/gdrive/sync', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await gdriveService.uploadBackup();
+    res.json(result);
+  } catch (err) {
+    console.error('[SETTINGS] Manual backup sync error:', err);
+    res.status(500).json({ error: err.message || 'Backup synchronization failed' });
+  }
+});
+
+// POST /api/settings/gdrive/disconnect - Disconnect Google account and disable sync
+router.post('/gdrive/disconnect', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE gdrive_settings SET 
+        refresh_token = '', 
+        use_sync = FALSE, 
+        last_status = 'Disconnected', 
+        updated_at = NOW() 
+       WHERE id = 1`
+    );
+    res.json({ success: true, message: 'Google account disconnected' });
+  } catch (err) {
+    console.error('[SETTINGS] Disconnect error:', err);
+    res.status(500).json({ error: 'Failed to disconnect account' });
   }
 });
 

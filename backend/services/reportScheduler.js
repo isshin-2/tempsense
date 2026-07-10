@@ -12,15 +12,51 @@ const fs = require('fs');
 async function startReportScheduler() {
   console.log('[SCHEDULER] Started report scheduler');
   
-  // Check every 5 minutes (less aggressive than 1 min)
+  // Check every 5 minutes for reports
   setInterval(async () => {
     try {
       await processSchedules();
     } catch (err) {
       console.error('[SCHEDULER] Process error:', err);
     }
-  }, 5 * 60 * 1000); 
+  }, 5 * 60 * 1000);
+
+  // Check for auto Google Drive backups every 15 minutes
+  setInterval(async () => {
+    try {
+      await processGDriveBackup();
+    } catch (err) {
+      console.error('[SCHEDULER] GDrive auto backup error:', err);
+    }
+  }, 15 * 60 * 1000);
 }
+
+async function processGDriveBackup() {
+  try {
+    const result = await pool.query('SELECT use_sync, last_sync, refresh_token FROM gdrive_settings WHERE id = 1');
+    const s = result.rows[0];
+    if (!s || !s.use_sync || !s.refresh_token) {
+      return;
+    }
+
+    const now = new Date();
+    if (s.last_sync) {
+      const lastSync = new Date(s.last_sync);
+      const diffHours = (now - lastSync) / (1000 * 60 * 60);
+      if (diffHours < 23) {
+        return; // Already backed up recently
+      }
+    }
+
+    console.log('[SCHEDULER] Starting automated backup upload to Google Drive...');
+    const gdriveService = require('./gdriveService');
+    await gdriveService.uploadBackup();
+    console.log('[SCHEDULER] Automated Google Drive backup uploaded successfully.');
+  } catch (err) {
+    console.error('[SCHEDULER] Automated Google Drive backup failed:', err.message);
+  }
+}
+
 
 async function processSchedules() {
   const now = new Date();

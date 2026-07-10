@@ -143,6 +143,25 @@ CREATE TABLE IF NOT EXISTS user_invitations (
   expires_at  TIMESTAMP NOT NULL
 );
 
+-- 12. GOOGLE DRIVE BACKUP SYNC CONFIGS
+CREATE TABLE IF NOT EXISTS gdrive_settings (
+  id                   SERIAL PRIMARY KEY,
+  use_sync             BOOLEAN DEFAULT FALSE,
+  client_id            TEXT,
+  client_secret        TEXT,
+  refresh_token        TEXT,
+  folder_id            VARCHAR(255),
+  last_sync            TIMESTAMP,
+  last_status          TEXT,
+  updated_at           TIMESTAMP DEFAULT NOW()
+);
+
 -- Seed: Default account
 INSERT INTO accounts (name) VALUES ('Maxworth Techserv')
   ON CONFLICT DO NOTHING;
+
+-- Seed: Default gdrive_settings row
+INSERT INTO gdrive_settings (id, use_sync, client_id, client_secret, refresh_token, folder_id)
+VALUES (1, FALSE, '', '', '', '')
+ON CONFLICT (id) DO NOTHING;
+
