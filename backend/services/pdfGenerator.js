@@ -55,7 +55,7 @@ function calcStatsWithTimestamps(rows, valKey) {
  * @returns {Promise<Buffer|void>} - Returns buffer if isInternal is true
  */
 async function generateReport(opts, res) {
-  const { siteId, roomId, nodeId, startDate, endDate, isInternal, excludeAlerts } = opts;
+  const { siteId, roomId, nodeId, startDate, endDate, isInternal, excludeAlerts, excludeOnboard } = opts;
 
   // Fetch organization name
   const accountRes = await pool.query('SELECT name FROM accounts ORDER BY id ASC LIMIT 1');
@@ -89,13 +89,16 @@ async function generateReport(opts, res) {
       AND sd.recorded_at >= $2
       AND sd.recorded_at <= $3
   `;
+  if (!siteId || siteId === 'undefined' || siteId === 'null') {
+    throw new Error('siteId is required');
+  }
   const params = [siteId, startDate, endDate];
 
-  if (roomId) {
+  if (roomId && roomId !== 'undefined' && roomId !== 'null' && roomId !== 'all') {
     query += ` AND n.room_id = $${params.length + 1}`;
     params.push(roomId);
   }
-  if (nodeId) {
+  if (nodeId && nodeId !== 'undefined' && nodeId !== 'null' && nodeId !== 'all') {
     query += ` AND sd.node_id = $${params.length + 1}`;
     params.push(nodeId);
   }
@@ -115,10 +118,13 @@ async function generateReport(opts, res) {
     if (r.t1 < r.temp_low) alerts.push('T1 Low');
     if (r.t2 > r.temp_high) alerts.push('T2 High');
     if (r.t2 < r.temp_low) alerts.push('T2 Low');
-    if (r.td > r.temp_high) alerts.push('DHT High');
-    if (r.td < r.temp_low) alerts.push('DHT Low');
-    if (r.humidity > r.humidity_high) alerts.push('Hum High');
-    if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+    
+    if (!excludeOnboard) {
+      if (r.td > r.temp_high) alerts.push('DHT High');
+      if (r.td < r.temp_low) alerts.push('DHT Low');
+      if (r.humidity > r.humidity_high) alerts.push('Hum High');
+      if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+    }
 
     const hasBreach = alerts.length > 0;
     if (excludeAlerts && hasBreach) {
@@ -221,8 +227,8 @@ async function generateReport(opts, res) {
 
       if (t1Stats.count > 0) tableData.push([`${nd.name} - ${nd.t1_name} (°C)`, ...Object.values(t1Stats)]);
       if (t2Stats.count > 0) tableData.push([`${nd.name} - ${nd.t2_name} (°C)`, ...Object.values(t2Stats)]);
-      if (tdStats.count > 0) tableData.push([`${nd.name} - ${nd.td_name} (°C)`, ...Object.values(tdStats)]);
-      if (humStats.count > 0) tableData.push([`${nd.name} - ${nd.humidity_name} (%)`, ...Object.values(humStats)]);
+      if (!excludeOnboard && tdStats.count > 0) tableData.push([`${nd.name} - ${nd.td_name} (°C)`, ...Object.values(tdStats)]);
+      if (!excludeOnboard && humStats.count > 0) tableData.push([`${nd.name} - ${nd.humidity_name} (%)`, ...Object.values(humStats)]);
     }
 
     if (tableData.length === 0) {
@@ -271,19 +277,35 @@ async function generateReport(opts, res) {
 
       // Determine dynamic headers if single node
       let logHeaders = ['Timestamp', 'Node', 'T1 °C', 'T2 °C', 'DHT °C', 'Hum %', 'Status'];
+      let logWidths = [105, 80, 45, 45, 45, 45, 80];
+      if (excludeOnboard) {
+        logHeaders = ['Timestamp', 'Node', 'T1 °C', 'T2 °C', 'Status'];
+        logWidths = [135, 110, 85, 85, 80];
+      }
       if (nodeId && filteredRows.length > 0) {
         const f = filteredRows[0];
-        logHeaders = [
-          'Timestamp',
-          'Node',
-          `${f.t1_name || 'T1'} °C`,
-          `${f.t2_name || 'T2'} °C`,
-          `${f.td_name || 'DHT'} °C`,
-          `${f.humidity_name || 'Hum'} %`,
-          'Status'
-        ];
+        if (excludeOnboard) {
+          logHeaders = [
+            'Timestamp',
+            'Node',
+            `${f.t1_name || 'T1'} °C`,
+            `${f.t2_name || 'T2'} °C`,
+            'Status'
+          ];
+          logWidths = [135, 110, 85, 85, 80];
+        } else {
+          logHeaders = [
+            'Timestamp',
+            'Node',
+            `${f.t1_name || 'T1'} °C`,
+            `${f.t2_name || 'T2'} °C`,
+            `${f.td_name || 'DHT'} °C`,
+            `${f.humidity_name || 'Hum'} %`,
+            'Status'
+          ];
+          logWidths = [105, 80, 45, 45, 45, 45, 80];
+        }
       }
-      const logWidths = [105, 80, 45, 45, 45, 45, 80];
 
       let ly = doc.y;
       xPos = 50;
@@ -309,17 +331,25 @@ async function generateReport(opts, res) {
         if (r.t1 < r.temp_low) alerts.push('T1 Low');
         if (r.t2 > r.temp_high) alerts.push('T2 High');
         if (r.t2 < r.temp_low) alerts.push('T2 Low');
-        if (r.td > r.temp_high) alerts.push('DHT High');
-        if (r.td < r.temp_low) alerts.push('DHT Low');
-        if (r.humidity > r.humidity_high) alerts.push('Hum High');
-        if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+        if (!excludeOnboard) {
+          if (r.td > r.temp_high) alerts.push('DHT High');
+          if (r.td < r.temp_low) alerts.push('DHT Low');
+          if (r.humidity > r.humidity_high) alerts.push('Hum High');
+          if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+        }
         const statusText = alerts.length > 0 ? alerts.join(', ') : 'Normal';
 
         const bg = i % 2 === 0 ? '#f8f9fa' : '#fff';
         doc.rect(50, ly, 495, 12).fill(bg);
         doc.fillColor(statusText === 'Normal' ? '#000' : '#b91c1c');
         xPos = 50;
-        const vals = [
+        const vals = excludeOnboard ? [
+          new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          r.node_name || `ID:${r.device_id}`,
+          r.t1 !== null ? r.t1.toFixed(1) : '--',
+          r.t2 !== null ? r.t2.toFixed(1) : '--',
+          statusText
+        ] : [
           new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
           r.node_name || `ID:${r.device_id}`,
           r.t1 !== null ? r.t1.toFixed(1) : '--',

@@ -85,7 +85,7 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Lock middleware to intercept requests
 const lockMiddleware = (req, res, next) => {
@@ -254,8 +254,11 @@ async function initDB() {
       await pool.query('ALTER TABLE smtp_settings ALTER COLUMN port DROP NOT NULL');
       await pool.query('ALTER TABLE smtp_settings ALTER COLUMN user_email DROP NOT NULL');
       await pool.query('ALTER TABLE smtp_settings ALTER COLUMN password DROP NOT NULL');
+      
+      // Migration for scheduled_reports exclude_onboard column
+      await pool.query('ALTER TABLE scheduled_reports ADD COLUMN IF NOT EXISTS exclude_onboard BOOLEAN DEFAULT FALSE');
     } catch (e) {
-      console.log('[DB] SMTP settings migrations run');
+      console.error('[DB] Database migrations error:', e.message);
     }
 
     // Restore SMTP settings from local backup if database table is empty (first start)

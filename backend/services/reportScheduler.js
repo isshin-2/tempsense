@@ -115,7 +115,8 @@ async function runReport(s) {
         startDate, 
         endDate, 
         isInternal: true,
-        excludeAlerts: s.exclude_alerts
+        excludeAlerts: s.exclude_alerts,
+        excludeOnboard: s.exclude_onboard
       });
       attachments.push({
         filename: `tempsense_report_${dateStr}.pdf`,
@@ -125,7 +126,7 @@ async function runReport(s) {
 
     // Generate CSV if needed
     if (s.report_type === 'csv' || s.report_type === 'both') {
-      const csvData = await getCSVData(s.site_id, startDate, endDate, s.exclude_alerts);
+      const csvData = await getCSVData(s.site_id, startDate, endDate, s.exclude_alerts, s.exclude_onboard);
       attachments.push({
         filename: `tempsense_report_${dateStr}.csv`,
         content: csvData
@@ -161,7 +162,7 @@ async function runReport(s) {
   }
 }
 
-async function getCSVData(siteId, startDate, endDate, excludeAlerts) {
+async function getCSVData(siteId, startDate, endDate, excludeAlerts, excludeOnboard) {
   const query = `
     SELECT sd.recorded_at, n.name as node_name, n.device_id, r.name as room_name,
            sd.t1, sd.t2, sd.td, sd.humidity, n.temp_high, n.temp_low, n.humidity_high, n.humidity_low,
@@ -181,26 +182,34 @@ async function getCSVData(siteId, startDate, endDate, excludeAlerts) {
     if (r.t1 < r.temp_low) alerts.push('T1 Low');
     if (r.t2 > r.temp_high) alerts.push('T2 High');
     if (r.t2 < r.temp_low) alerts.push('T2 Low');
-    if (r.td > r.temp_high) alerts.push('DHT High');
-    if (r.td < r.temp_low) alerts.push('DHT Low');
-    if (r.humidity > r.humidity_high) alerts.push('Hum High');
-    if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+    
+    if (!excludeOnboard) {
+      if (r.td > r.temp_high) alerts.push('DHT High');
+      if (r.td < r.temp_low) alerts.push('DHT Low');
+      if (r.humidity > r.humidity_high) alerts.push('Hum High');
+      if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+    }
 
     if (excludeAlerts && alerts.length > 0) {
       continue;
     }
 
-    csvData.push({
+    const row = {
       Timestamp: new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
       Node: r.node_name,
       DeviceID: r.device_id,
       Room: r.room_name,
       T1: r.t1 !== null ? r.t1.toFixed(2) : '',
       T2: r.t2 !== null ? r.t2.toFixed(2) : '',
-      DHT: r.td !== null ? r.td.toFixed(2) : '',
-      Humidity: r.humidity !== null ? r.humidity.toFixed(2) : '',
       Status: alerts.length > 0 ? alerts.join(', ') : 'Normal'
-    });
+    };
+
+    if (!excludeOnboard) {
+      row.DHT = r.td !== null ? r.td.toFixed(2) : '';
+      row.Humidity = r.humidity !== null ? r.humidity.toFixed(2) : '';
+    }
+
+    csvData.push(row);
   }
 
   const csvColumns = [
@@ -210,8 +219,10 @@ async function getCSVData(siteId, startDate, endDate, excludeAlerts) {
     { key: 'Room', header: 'Room' },
     { key: 'T1', header: 'T1 (°C)' },
     { key: 'T2', header: 'T2 (°C)' },
-    { key: 'DHT', header: 'DHT Temp (°C)' },
-    { key: 'Humidity', header: 'Humidity (%)' },
+    ...(!excludeOnboard ? [
+      { key: 'DHT', header: 'DHT Temp (°C)' },
+      { key: 'Humidity', header: 'Humidity (%)' }
+    ] : []),
     { key: 'Status', header: 'Alerts/Status' },
   ];
 

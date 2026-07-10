@@ -16,7 +16,8 @@ router.get('/latest', authMiddleware, async (req, res) => {
         n.last_seen, n.is_active, n.reboot_required as reboot_required,
         r.id as room_id, r.name as room_name,
         s.id as site_id, s.name as site_name,
-        sd.t1, sd.t2, sd.td, sd.humidity, sd.recorded_at
+        sd.t1, sd.t2, sd.td, sd.humidity, sd.recorded_at,
+        n.t1_name, n.t2_name, n.td_name, n.humidity_name
       FROM nodes n
       JOIN rooms r ON n.room_id = r.id
       JOIN sites s ON r.site_id = s.id
@@ -87,8 +88,8 @@ router.get('/history', authMiddleware, async (req, res) => {
 // GET /api/data/export/csv?siteId=&startDate=&endDate=
 router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
-    const { siteId, roomId, nodeId, startDate, endDate, excludeAlerts } = req.query;
-    if (!siteId || !startDate || !endDate) {
+    const { siteId, roomId, nodeId, startDate, endDate, excludeAlerts, excludeOnboard } = req.query;
+    if (!siteId || siteId === 'undefined' || siteId === 'null' || !startDate || !endDate) {
       return res.status(400).json({ error: 'siteId, startDate, and endDate are required' });
     }
 
@@ -103,11 +104,11 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
     `;
     const params = [siteId, startDate, endDate];
 
-    if (roomId) {
+    if (roomId && roomId !== 'undefined' && roomId !== 'null' && roomId !== 'all') {
       params.push(roomId);
       query += ` AND n.room_id = $${params.length}`;
     }
-    if (nodeId) {
+    if (nodeId && nodeId !== 'undefined' && nodeId !== 'null' && nodeId !== 'all') {
       params.push(nodeId);
       query += ` AND sd.node_id = $${params.length}`;
     }
@@ -124,8 +125,10 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
       { key: 'Room', header: 'Room' },
       { key: 'T1', header: nodeId && firstRow ? `${firstRow.t1_name || 'T1'} (°C)` : 'T1 (°C)' },
       { key: 'T2', header: nodeId && firstRow ? `${firstRow.t2_name || 'T2'} (°C)` : 'T2 (°C)' },
-      { key: 'DHT', header: nodeId && firstRow ? `${firstRow.td_name || 'DHT Temp'} (°C)` : 'DHT Temp (°C)' },
-      { key: 'Humidity', header: nodeId && firstRow ? `${firstRow.humidity_name || 'Humidity'} (%)` : 'Humidity (%)' },
+      ...(excludeOnboard === 'true' ? [] : [
+        { key: 'DHT', header: nodeId && firstRow ? `${firstRow.td_name || 'DHT Temp'} (°C)` : 'DHT Temp (°C)' },
+        { key: 'Humidity', header: nodeId && firstRow ? `${firstRow.humidity_name || 'Humidity'} (%)` : 'Humidity (%)' },
+      ]),
       { key: 'Status', header: 'Alerts/Status' },
     ];
 
@@ -136,26 +139,34 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
       if (r.t1 < r.temp_low) alerts.push('T1 Low');
       if (r.t2 > r.temp_high) alerts.push('T2 High');
       if (r.t2 < r.temp_low) alerts.push('T2 Low');
-      if (r.td > r.temp_high) alerts.push('DHT High');
-      if (r.td < r.temp_low) alerts.push('DHT Low');
-      if (r.humidity > r.humidity_high) alerts.push('Hum High');
-      if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+      
+      if (excludeOnboard !== 'true') {
+        if (r.td > r.temp_high) alerts.push('DHT High');
+        if (r.td < r.temp_low) alerts.push('DHT Low');
+        if (r.humidity > r.humidity_high) alerts.push('Hum High');
+        if (r.humidity < r.humidity_low) alerts.push('Hum Low');
+      }
 
       if (excludeAlerts === 'true' && alerts.length > 0) {
         continue;
       }
 
-      csvData.push({
+      const row = {
         Timestamp: new Date(r.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         Node: r.node_name,
         DeviceID: r.device_id,
         Room: r.room_name,
         T1: r.t1 !== null ? r.t1.toFixed(2) : '',
         T2: r.t2 !== null ? r.t2.toFixed(2) : '',
-        DHT: r.td !== null ? r.td.toFixed(2) : '',
-        Humidity: r.humidity !== null ? r.humidity.toFixed(2) : '',
         Status: alerts.length > 0 ? alerts.join(', ') : 'Normal'
-      });
+      };
+
+      if (excludeOnboard !== 'true') {
+        row.DHT = r.td !== null ? r.td.toFixed(2) : '';
+        row.Humidity = r.humidity !== null ? r.humidity.toFixed(2) : '';
+      }
+
+      csvData.push(row);
     }
 
     const filename = `tempsense_report_${new Date().toISOString().split('T')[0]}.csv`;
@@ -172,11 +183,19 @@ router.get('/export/csv', authMiddleware, requireRole('admin', 'site_manager'), 
 // GET /api/data/export/pdf?siteId=&startDate=&endDate=
 router.get('/export/pdf', authMiddleware, requireRole('admin', 'site_manager'), async (req, res) => {
   try {
-    const { siteId, roomId, nodeId, startDate, endDate, excludeAlerts } = req.query;
-    if (!siteId || !startDate || !endDate) {
+    const { siteId, roomId, nodeId, startDate, endDate, excludeAlerts, excludeOnboard } = req.query;
+    if (!siteId || siteId === 'undefined' || siteId === 'null' || !startDate || !endDate) {
       return res.status(400).json({ error: 'siteId, startDate, and endDate are required' });
     }
-    await generateReport({ siteId, roomId, nodeId, startDate, endDate, excludeAlerts: excludeAlerts === 'true' }, res);
+    await generateReport({ 
+      siteId, 
+      roomId, 
+      nodeId, 
+      startDate, 
+      endDate, 
+      excludeAlerts: excludeAlerts === 'true', 
+      excludeOnboard: excludeOnboard === 'true' 
+    }, res);
   } catch (err) {
     console.error('[DATA] PDF export error:', err);
     res.status(500).json({ error: 'Server error' });

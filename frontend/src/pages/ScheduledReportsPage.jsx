@@ -11,7 +11,8 @@ export default function ScheduledReportsPage() {
   const [testingIds, setTestingIds] = useState({});
 
   const [form, setForm] = useState({
-    name: '', frequency: 'daily', recipients: '', siteId: '', reportType: 'pdf', isActive: true
+    name: '', frequency: 'daily', recipients: '', siteId: '', reportType: 'pdf', isActive: true,
+    excludeAlerts: false, excludeOnboard: false
   });
 
   async function handleTestReport(id, name) {
@@ -62,7 +63,9 @@ export default function ScheduledReportsPage() {
       recipients: s.recipients,
       siteId: s.site_id,
       reportType: s.report_type,
-      isActive: s.is_active
+      isActive: s.is_active,
+      excludeAlerts: s.exclude_alerts || false,
+      excludeOnboard: s.exclude_onboard || false
     });
     setShowModal(true);
   }
@@ -73,7 +76,10 @@ export default function ScheduledReportsPage() {
   }
 
   function resetForm() {
-    setForm({ name: '', frequency: 'daily', recipients: '', siteId: '', reportType: 'pdf', isActive: true });
+    setForm({ 
+      name: '', frequency: 'daily', recipients: '', siteId: '', reportType: 'pdf', isActive: true,
+      excludeAlerts: false, excludeOnboard: false 
+    });
     setEditingSchedule(null);
   }
 
@@ -190,6 +196,18 @@ export default function ScheduledReportsPage() {
                 <input type="checkbox" id="srActive" checked={form.isActive}
                   onChange={e => setForm({ ...form, isActive: e.target.checked })} />
                 <label htmlFor="srActive">Schedule is Active</label>
+              </div>
+
+              <div className="form-group flex items-center gap-2">
+                <input type="checkbox" id="srExcludeAlerts" checked={form.excludeAlerts}
+                  onChange={e => setForm({ ...form, excludeAlerts: e.target.checked })} />
+                <label htmlFor="srExcludeAlerts">Exclude breaches (Normal readings only)</label>
+              </div>
+
+              <div className="form-group flex items-center gap-2">
+                <input type="checkbox" id="srExcludeOnboard" checked={form.excludeOnboard}
+                  onChange={e => setForm({ ...form, excludeOnboard: e.target.checked })} />
+                <label htmlFor="srExcludeOnboard">Exclude onboard sensors (DHT22 Temp/Hum)</label>
               </div>
 
               <div className="modal-actions">

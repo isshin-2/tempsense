@@ -145,11 +145,11 @@ router.get('/reports', authMiddleware, requireRole('admin', 'site_manager'), asy
 
 router.post('/reports', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { name, frequency, recipients, siteId, reportType, isActive } = req.body;
+    const { name, frequency, recipients, siteId, reportType, isActive, excludeAlerts, excludeOnboard } = req.body;
     const result = await pool.query(
-      `INSERT INTO scheduled_reports (name, frequency, recipients, site_id, report_type, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [name, frequency, recipients, siteId, reportType, isActive ?? true]
+      `INSERT INTO scheduled_reports (name, frequency, recipients, site_id, report_type, is_active, exclude_alerts, exclude_onboard)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [name, frequency, recipients, siteId, reportType, isActive ?? true, excludeAlerts ?? false, excludeOnboard ?? false]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -160,7 +160,7 @@ router.post('/reports', authMiddleware, requireRole('admin'), async (req, res) =
 
 router.put('/reports/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { name, frequency, recipients, siteId, reportType, isActive } = req.body;
+    const { name, frequency, recipients, siteId, reportType, isActive, excludeAlerts, excludeOnboard } = req.body;
     const result = await pool.query(
       `UPDATE scheduled_reports SET 
         name = COALESCE($1, name),
@@ -168,9 +168,11 @@ router.put('/reports/:id', authMiddleware, requireRole('admin'), async (req, res
         recipients = COALESCE($3, recipients),
         site_id = COALESCE($4, site_id),
         report_type = COALESCE($5, report_type),
-        is_active = COALESCE($6, is_active)
-       WHERE id = $7 RETURNING *`,
-      [name, frequency, recipients, siteId, reportType, isActive, req.params.id]
+        is_active = COALESCE($6, is_active),
+        exclude_alerts = COALESCE($7, exclude_alerts),
+        exclude_onboard = COALESCE($8, exclude_onboard)
+       WHERE id = $9 RETURNING *`,
+      [name, frequency, recipients, siteId, reportType, isActive, excludeAlerts, excludeOnboard, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {

@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS scheduled_reports (
   report_type  VARCHAR(20) DEFAULT 'pdf', -- 'pdf', 'csv', 'both'
   is_active    BOOLEAN DEFAULT TRUE,
   exclude_alerts BOOLEAN DEFAULT FALSE,
+  exclude_onboard BOOLEAN DEFAULT FALSE,
   last_run     TIMESTAMP,
   created_at   TIMESTAMP DEFAULT NOW()
 );

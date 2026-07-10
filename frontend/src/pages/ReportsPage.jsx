@@ -17,6 +17,7 @@ export default function ReportsPage() {
     startDate: new Date(Date.now() - 86400000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     excludeAlerts: false,
+    excludeOnboard: false,
   });
 
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function ReportsPage() {
       startDate: filters.startDate,
       endDate: filters.endDate + 'T23:59:59',
       excludeAlerts: filters.excludeAlerts,
+      excludeOnboard: filters.excludeOnboard,
     });
   }
 
@@ -76,6 +78,7 @@ export default function ReportsPage() {
       startDate: filters.startDate,
       endDate: filters.endDate + 'T23:59:59',
       excludeAlerts: filters.excludeAlerts,
+      excludeOnboard: filters.excludeOnboard,
     });
   }
 
@@ -144,6 +147,13 @@ export default function ReportsPage() {
               onChange={(e) => setFilters({ ...filters, excludeAlerts: e.target.checked })} />
             <label htmlFor="excludeAlerts" style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 600, userSelect: 'none' }}>
               Exclude Breaches
+            </label>
+          </div>
+          <div className="form-group flex items-center gap-2" style={{ margin: 0, alignSelf: 'end', paddingBottom: '8px' }}>
+            <input type="checkbox" id="excludeOnboard" checked={filters.excludeOnboard}
+              onChange={(e) => setFilters({ ...filters, excludeOnboard: e.target.checked })} />
+            <label htmlFor="excludeOnboard" style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 600, userSelect: 'none' }}>
+              Exclude Onboard Sensors (DHT22)
             </label>
           </div>
         </div>
