@@ -48,12 +48,11 @@ export default function SettingsPage() {
 
   // Google Drive Sync States
   const [gdrive, setGDrive] = useState({
-    use_sync: false, client_id: '', client_secret: '', folder_id: '', last_sync: '', last_status: '', is_connected: false, isInbuiltUsed: false
+    use_sync: false, folder_id: '', last_sync: '', last_status: '', is_connected: false
   });
   const [gdriveLoading, setGDriveLoading] = useState(false);
   const [gdriveSaving, setGDriveSaving] = useState(false);
   const [gdriveSyncing, setGDriveSyncing] = useState(false);
-  const [gdriveAdvanced, setGDriveAdvanced] = useState(false);
 
   // Active settings tab state
   const [activeTab, setActiveTab] = useState(() => {
@@ -388,8 +387,6 @@ export default function SettingsPage() {
     try {
       await saveGDriveSettings({
         use_sync: gdrive.use_sync,
-        client_id: gdrive.client_id,
-        client_secret: gdrive.client_secret,
         folder_id: gdrive.folder_id
       });
       setStatus({ type: 'success', message: 'Google Drive settings updated successfully!' });
@@ -402,25 +399,13 @@ export default function SettingsPage() {
   }
 
   async function handleConnectGDrive() {
-    if (!gdrive.client_id) {
-      setGDriveAdvanced(true);
-      setStatus({ type: 'error', message: 'Please enter your Google OAuth Client ID under Advanced Configuration first.' });
-      return;
-    }
-    setStatus({ type: 'info', message: 'Saving credentials and redirecting to Google...' });
+    setStatus({ type: 'info', message: 'Redirecting to Google for authorization...' });
     try {
-      // Auto-save credentials before redirecting
-      await saveGDriveSettings({
-        use_sync: gdrive.use_sync,
-        client_id: gdrive.client_id,
-        client_secret: gdrive.client_secret,
-        folder_id: gdrive.folder_id
-      });
       const redirectUri = window.location.origin + window.location.pathname;
       const { url } = await getGDriveAuthUrl(redirectUri);
       window.location.href = url;
     } catch (err) {
-      setStatus({ type: 'error', message: err.message || 'Failed to connect. Check your credentials in Advanced Configuration.' });
+      setStatus({ type: 'error', message: err.message || 'Failed to connect. Make sure your redirect URI matches http://localhost:81/settings or http://localhost:5173/settings' });
     }
   }
 
@@ -773,24 +758,12 @@ export default function SettingsPage() {
                             <Cloud size={20} style={{ color: 'var(--text-muted)' }} />
                           )}
                           <div>
-                            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
                               {gdrive.is_connected ? 'Google Account Connected' : 'Not Connected'}
-                              {gdrive.is_connected && gdrive.isInbuiltUsed && (
-                                <span style={{
-                                  background: 'rgba(59, 130, 246, 0.12)',
-                                  color: 'var(--accent-blue)',
-                                  padding: '2px 8px',
-                                  borderRadius: '20px',
-                                  fontSize: '11px',
-                                  fontWeight: 600
-                                }}>Inbuilt</span>
-                              )}
                             </div>
                             <div className="text-xs text-muted" style={{ marginTop: '2px' }}>
                               {gdrive.is_connected
-                                ? (gdrive.isInbuiltUsed 
-                                  ? 'Your Google Drive is linked using secure inbuilt settings.' 
-                                  : 'Your Google Drive is linked using custom settings.')
+                                ? 'Your Google Drive is linked for automatic backup uploads.'
                                 : 'Connect your Google account to enable cloud backup sync.'}
                             </div>
                           </div>
@@ -808,23 +781,6 @@ export default function SettingsPage() {
                           </button>
                         )}
                       </div>
-
-                      {/* Setup hint when not connected and no client_id */}
-                      {!gdrive.is_connected && !gdrive.client_id && (
-                        <div style={{
-                          background: 'rgba(59, 130, 246, 0.05)',
-                          padding: '14px 18px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(59, 130, 246, 0.15)',
-                          fontSize: '13.5px',
-                          color: 'var(--text-secondary)',
-                          lineHeight: 1.6,
-                          marginBottom: '24px'
-                        }}>
-                          <strong style={{ color: 'var(--accent-blue)' }}>Inbuilt Integration Available:</strong>{' '}
-                          TempSense includes a secure, pre-configured Google OAuth integration. You can click <strong>Connect Google Account</strong> directly to authorize and enable nightly backups, or open <strong>Advanced Configuration</strong> below to override with custom credentials.
-                        </div>
-                      )}
 
                       {/* Sync Configuration (visible when connected) */}
                       {gdrive.is_connected && (
@@ -870,16 +826,6 @@ export default function SettingsPage() {
                         </form>
                       )}
 
-                      {/* Save button when not connected (saves credentials) */}
-                      {!gdrive.is_connected && gdrive.client_id && (
-                        <form onSubmit={handleSaveGDrive}>
-                          <button className="btn btn-primary" type="submit" disabled={gdriveSaving} style={{ width: 'auto', marginBottom: '24px' }}>
-                            {gdriveSaving ? <Loader2 size={16} className="animate-spin mr-8" /> : <Save size={16} className="mr-8" />}
-                            Save & Connect
-                          </button>
-                        </form>
-                      )}
-
                       {/* Sync Log */}
                       {gdrive.is_connected && (gdrive.last_sync || gdrive.last_status) && (
                         <div style={{
@@ -906,99 +852,6 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       )}
-
-                      {/* Advanced Configuration Accordion */}
-                      <div style={{ marginTop: '28px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setGDriveAdvanced(!gdriveAdvanced)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            color: 'var(--text-secondary)',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            padding: '4px 0',
-                            width: '100%',
-                            textAlign: 'left'
-                          }}
-                        >
-                          <span style={{
-                            display: 'inline-block',
-                            transform: gdriveAdvanced ? 'rotate(90deg)' : 'rotate(0deg)',
-                            transition: 'transform 0.2s ease',
-                            fontSize: '12px'
-                          }}>▶</span>
-                          Advanced Configuration
-                          <span className="text-xs text-muted" style={{ fontWeight: 400, marginLeft: '4px' }}>
-                            — OAuth credentials & redirect URI
-                          </span>
-                        </button>
-
-                        {gdriveAdvanced && (
-                          <form onSubmit={handleSaveGDrive} style={{ marginTop: '16px' }}>
-                            <div style={{
-                              background: 'rgba(255,255,255,0.01)',
-                              padding: '20px',
-                              borderRadius: '10px',
-                              border: '1px solid var(--border-subtle)',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '16px'
-                            }}>
-                              <p className="text-xs text-muted" style={{ margin: 0, lineHeight: 1.5 }}>
-                                Create OAuth 2.0 client credentials in your <strong>Google Cloud Console</strong>.
-                                Set the application type to <strong>Web Application</strong>.
-                              </p>
-
-                              <div className="form-group" style={{ margin: 0 }}>
-                                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500, fontSize: '13px' }}>Google Client ID</label>
-                                <input className="form-input" placeholder="e.g. 123456-abcdef.apps.googleusercontent.com"
-                                  value={gdrive.client_id} onChange={e => setGDrive({ ...gdrive, client_id: e.target.value })} />
-                              </div>
-
-                              <div className="form-group" style={{ margin: 0 }}>
-                                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500, fontSize: '13px' }}>Google Client Secret</label>
-                                <input className="form-input" type="password"
-                                  placeholder={gdrive.is_connected ? '••••••••••••••••' : 'Enter client secret'}
-                                  value={gdrive.client_secret || ''} onChange={e => setGDrive({ ...gdrive, client_secret: e.target.value })} />
-                                {gdrive.is_connected && <p className="text-xs text-muted mt-4">Leave blank to keep existing secret.</p>}
-                              </div>
-
-                              <div style={{
-                                background: 'rgba(59, 130, 246, 0.05)',
-                                padding: '10px 14px',
-                                borderRadius: '6px',
-                                fontSize: '12px',
-                                color: 'var(--text-secondary)',
-                                lineHeight: 1.5
-                              }}>
-                                <strong>Authorized Redirect URI:</strong><br />
-                                <code style={{
-                                  background: 'var(--bg-secondary)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  display: 'inline-block',
-                                  marginTop: '4px',
-                                  fontFamily: 'monospace',
-                                  fontSize: '11px'
-                                }}>
-                                  {window.location.origin + window.location.pathname}
-                                </code>
-                              </div>
-
-                              <button className="btn btn-primary" type="submit" disabled={gdriveSaving} style={{ width: 'auto', alignSelf: 'flex-start' }}>
-                                {gdriveSaving ? <Loader2 size={16} className="animate-spin mr-8" /> : <Save size={16} className="mr-8" />}
-                                Save Credentials
-                              </button>
-                            </div>
-                          </form>
-                        )}
-                      </div>
                     </div>
                   )}
                 </div>

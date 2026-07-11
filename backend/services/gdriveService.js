@@ -34,21 +34,16 @@ async function getGDriveSettings() {
  * Initialize Google OAuth2 Client
  */
 async function getOAuth2Client(settings, redirectUri) {
-  if (!settings) {
-    settings = await getGDriveSettings();
-  }
+  let clientId = null;
+  let clientSecret = null;
   
-  let clientId = settings?.client_id;
-  let clientSecret = settings?.client_secret;
-  
-  // Fallback to decrypted default credentials if not entered in database
-  if ((!clientId || !clientId.trim()) && process.env.SYSTEM_DECRYPTION_KEY) {
+  if (process.env.SYSTEM_DECRYPTION_KEY) {
     clientId = decryptString(GDRIVE_CIPHER_ID, GDRIVE_IV_ID, process.env.SYSTEM_DECRYPTION_KEY);
     clientSecret = decryptString(GDRIVE_CIPHER_SECRET, GDRIVE_IV_SECRET, process.env.SYSTEM_DECRYPTION_KEY);
   }
   
   if (!clientId || !clientSecret) {
-    throw new Error('Google OAuth Client ID or Client Secret is not configured.');
+    throw new Error('Google OAuth Client credentials not decrypted or system is locked.');
   }
   
   return new google.auth.OAuth2(
