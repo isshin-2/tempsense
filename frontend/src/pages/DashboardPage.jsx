@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchLatest, fetchCompanyName, connectSocket, disconnectSocket } from '../services/api';
+import { fetchLatest, fetchCompanyName, connectSocket, disconnectSocket, fetchCachedUpdateStatus } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import SensorCard from '../components/SensorCard';
 import GettingStarted from '../components/GettingStarted';
-import { Activity, Thermometer, Droplets, AlertTriangle, Building2 } from 'lucide-react';
+import { Activity, Thermometer, Droplets, AlertTriangle, Building2, RefreshCw } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -11,8 +12,23 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
   const [companyName, setCompanyName] = useState(user?.companyName || '');
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      fetchCachedUpdateStatus()
+        .then(res => {
+          if (res.updateAvailable) {
+            setUpdateAvailable(true);
+          }
+        })
+        .catch(err => console.error('Failed to check update status:', err));
+    }
+  }, [user]);
 
   useEffect(() => {
     loadData();
@@ -176,6 +192,61 @@ export default function DashboardPage() {
           ))
         )}
       </div>
+
+      {updateAvailable && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 1000,
+          background: 'var(--bg-card)',
+          border: '1px solid var(--accent-blue)',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+          padding: '16px',
+          maxWidth: '320px',
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'start',
+          animation: 'slideUp 0.3s ease-out'
+        }}>
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.1)',
+            color: 'var(--accent-blue)',
+            borderRadius: '50%',
+            padding: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <RefreshCw size={18} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px 0', color: 'var(--text-primary)' }}>
+              Server Update Available
+            </h4>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+              A new version of TempSense is ready. Update now to access the latest features.
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn btn-primary btn-sm"
+                onClick={() => navigate('/settings?tab=updates')}
+                style={{ padding: '6px 12px', fontSize: '11px' }}
+              >
+                Go to Settings
+              </button>
+              <button 
+                className="btn btn-ghost btn-sm"
+                onClick={() => setUpdateAvailable(false)}
+                style={{ padding: '6px 12px', fontSize: '11px' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

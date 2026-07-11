@@ -32,7 +32,12 @@ async function runGitCommand(cmd) {
 async function isGitAvailable() {
   try {
     const gitCheck = await runGitCommand('git rev-parse --is-inside-work-tree');
-    return gitCheck.success && gitCheck.stdout === 'true';
+    if (gitCheck.success && gitCheck.stdout === 'true') {
+      await runGitCommand('git config core.autocrlf false');
+      await runGitCommand('git config core.filemode false');
+      return true;
+    }
+    return false;
   } catch (err) {
     return false;
   }
@@ -105,8 +110,7 @@ async function checkForUpdates() {
     const localHash = localHashRes.stdout;
     const remoteHash = remoteHashRes.stdout;
     
-    // Update last check in database
-    await pool.query('UPDATE system_settings SET last_update_check = NOW() WHERE id = 1');
+
 
     let updateAvailable = false;
     let commits = [];
@@ -145,6 +149,12 @@ async function checkForUpdates() {
     // Get current commit message and date
     const commitMsgRes = await runGitCommand('git log -1 --format="%s"');
     const commitDateRes = await runGitCommand('git log -1 --format="%cr"');
+
+    // Update database with latest status
+    await pool.query(
+      'UPDATE system_settings SET last_update_check = NOW(), update_available = $1 WHERE id = 1',
+      [updateAvailable]
+    );
 
     return {
       gitAvailable: true,

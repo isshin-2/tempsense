@@ -1,19 +1,21 @@
 # Use Node.js 20 slim as the base image
 FROM node:20-slim
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# Install curl and git for health checks and update checks
+RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
+# Set the working directory to /app
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from backend directory
+COPY backend/package*.json ./backend/
 
-# Install dependencies
+# Install dependencies in /app/backend
+WORKDIR /app/backend
 RUN npm install --production
 
-# Copy the rest of the application code
+# Go back to /app and copy the entire project (including .git)
+WORKDIR /app
 COPY . .
 
 # Expose the HTTP API port and the TCP Sensor port
@@ -29,5 +31,6 @@ ENV DB_NAME=tempsense
 ENV DB_USER=postgres
 ENV DB_PASS=postgres
 
-# Start the server
+# Start the server from /app/backend
+WORKDIR /app/backend
 CMD ["node", "server.js"]

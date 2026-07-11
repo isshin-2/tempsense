@@ -394,6 +394,12 @@ export function disconnectSocket() {
 }
 
 // ===== Updates & Diagnostics =====
+export async function fetchCachedUpdateStatus() {
+  const res = await fetch(`${API_BASE}/settings/update/status`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch update status');
+  return res.json();
+}
+
 export async function fetchUpdateStatus() {
   const res = await fetch(`${API_BASE}/settings/update`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch update status');

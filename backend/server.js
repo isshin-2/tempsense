@@ -59,6 +59,7 @@ function tryUnlock(rawKey) {
   const decrypted = decryptSMTPPassword(decodedKey);
   if (decrypted === 'kqqt sqsq exfk ljdx') {
     process.env.DECRYPTED_SMTP_PASS = decrypted;
+    process.env.SYSTEM_DECRYPTION_KEY = decodedKey;
     return true;
   }
   return false;
@@ -235,6 +236,7 @@ async function initDB() {
         auto_update_enabled    BOOLEAN DEFAULT TRUE,
         auto_update_interval   INT DEFAULT 24, -- in hours
         last_update_check      TIMESTAMP,
+        update_available       BOOLEAN DEFAULT FALSE,
         updated_at             TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -257,6 +259,9 @@ async function initDB() {
       
       // Migration for scheduled_reports exclude_onboard column
       await pool.query('ALTER TABLE scheduled_reports ADD COLUMN IF NOT EXISTS exclude_onboard BOOLEAN DEFAULT FALSE');
+      
+      // Migration for system_settings update_available column
+      await pool.query('ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS update_available BOOLEAN DEFAULT FALSE');
     } catch (e) {
       console.error('[DB] Database migrations error:', e.message);
     }

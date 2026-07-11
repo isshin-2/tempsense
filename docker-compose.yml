@@ -32,7 +32,9 @@ services:
 
   # Backend API + TCP Server
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: tempsense-backend
     restart: always
     environment:
@@ -44,6 +46,7 @@ services:
       - PORT=3001
       - TCP_PORT=1024
       - JWT_SECRET=tempsense_secret_key_change_me
+      - SMTP_DECRYPTION_KEY=Xgtfgz-Mcrrc
     ports:
       - "3001:3001"
       - "1024:1024"

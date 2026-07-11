@@ -48,7 +48,7 @@ export default function SettingsPage() {
 
   // Google Drive Sync States
   const [gdrive, setGDrive] = useState({
-    use_sync: false, client_id: '', client_secret: '', folder_id: '', last_sync: '', last_status: '', is_connected: false
+    use_sync: false, client_id: '', client_secret: '', folder_id: '', last_sync: '', last_status: '', is_connected: false, isInbuiltUsed: false
   });
   const [gdriveLoading, setGDriveLoading] = useState(false);
   const [gdriveSaving, setGDriveSaving] = useState(false);
@@ -56,7 +56,10 @@ export default function SettingsPage() {
   const [gdriveAdvanced, setGDriveAdvanced] = useState(false);
 
   // Active settings tab state
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'general';
+  });
 
   const tabs = [
     { id: 'general', label: 'General Profile', icon: <Building size={18} /> },
@@ -770,12 +773,24 @@ export default function SettingsPage() {
                             <Cloud size={20} style={{ color: 'var(--text-muted)' }} />
                           )}
                           <div>
-                            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
+                            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {gdrive.is_connected ? 'Google Account Connected' : 'Not Connected'}
+                              {gdrive.is_connected && gdrive.isInbuiltUsed && (
+                                <span style={{
+                                  background: 'rgba(59, 130, 246, 0.12)',
+                                  color: 'var(--accent-blue)',
+                                  padding: '2px 8px',
+                                  borderRadius: '20px',
+                                  fontSize: '11px',
+                                  fontWeight: 600
+                                }}>Inbuilt</span>
+                              )}
                             </div>
                             <div className="text-xs text-muted" style={{ marginTop: '2px' }}>
                               {gdrive.is_connected
-                                ? 'Your Google Drive is linked for automatic backup uploads.'
+                                ? (gdrive.isInbuiltUsed 
+                                  ? 'Your Google Drive is linked using secure inbuilt settings.' 
+                                  : 'Your Google Drive is linked using custom settings.')
                                 : 'Connect your Google account to enable cloud backup sync.'}
                             </div>
                           </div>
@@ -788,7 +803,6 @@ export default function SettingsPage() {
                           </button>
                         ) : (
                           <button className="btn btn-primary" type="button" onClick={handleConnectGDrive}
-                            disabled={!gdrive.client_id}
                             style={{ width: 'auto', fontSize: '13px', padding: '8px 20px' }}>
                             Connect Google Account
                           </button>
@@ -798,17 +812,17 @@ export default function SettingsPage() {
                       {/* Setup hint when not connected and no client_id */}
                       {!gdrive.is_connected && !gdrive.client_id && (
                         <div style={{
-                          background: 'rgba(245,158,11,0.06)',
+                          background: 'rgba(59, 130, 246, 0.05)',
                           padding: '14px 18px',
                           borderRadius: '8px',
-                          border: '1px solid rgba(245,158,11,0.15)',
-                          fontSize: '13px',
+                          border: '1px solid rgba(59, 130, 246, 0.15)',
+                          fontSize: '13.5px',
                           color: 'var(--text-secondary)',
                           lineHeight: 1.6,
                           marginBottom: '24px'
                         }}>
-                          <strong style={{ color: '#f59e0b' }}>Setup Required:</strong>{' '}
-                          Open <strong>Advanced Configuration</strong> below to enter your Google OAuth credentials, then save before connecting.
+                          <strong style={{ color: 'var(--accent-blue)' }}>Inbuilt Integration Available:</strong>{' '}
+                          TempSense includes a secure, pre-configured Google OAuth integration. You can click <strong>Connect Google Account</strong> directly to authorize and enable nightly backups, or open <strong>Advanced Configuration</strong> below to override with custom credentials.
                         </div>
                       )}
 

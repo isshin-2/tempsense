@@ -1,5 +1,26 @@
 const { google } = require('googleapis');
 const pool = require('../db/pool');
+const crypto = require('crypto');
+
+// Encrypted default Google Drive client credentials (safe on GitHub)
+const GDRIVE_IV_ID = '51fae7a9b1655c57fb99ab14e5cb4bca';
+const GDRIVE_CIPHER_ID = '210fda9f072bce236cc111bf3623956a988c72f8f95298a755ca577c7f4f217813e7ea9cdfb47fba9b3cac737f1aea825607f5c121991eee80084fd72a744122ea2a40d50b5ccf4dca4b7f395768331b';
+
+const GDRIVE_IV_SECRET = 'f4f653c162329f505bc7d1fc252024a2';
+const GDRIVE_CIPHER_SECRET = 'e12e3d4bb46ddec67892e47c5b882e4ea42928c10622c6d2d29ba965df959e5157d313fe916ac7e54d2fb9f47cba0644';
+
+function decryptString(ciphertext, ivHex, passphrase) {
+  try {
+    const key = crypto.createHash('sha256').update(passphrase).digest();
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (e) {
+    return null;
+  }
+}
 
 /**
  * Helper to get Google Drive settings from database
@@ -16,12 +37,23 @@ async function getOAuth2Client(settings, redirectUri) {
   if (!settings) {
     settings = await getGDriveSettings();
   }
-  if (!settings || !settings.client_id || !settings.client_secret) {
+  
+  let clientId = settings?.client_id;
+  let clientSecret = settings?.client_secret;
+  
+  // Fallback to decrypted default credentials if not entered in database
+  if ((!clientId || !clientId.trim()) && process.env.SYSTEM_DECRYPTION_KEY) {
+    clientId = decryptString(GDRIVE_CIPHER_ID, GDRIVE_IV_ID, process.env.SYSTEM_DECRYPTION_KEY);
+    clientSecret = decryptString(GDRIVE_CIPHER_SECRET, GDRIVE_IV_SECRET, process.env.SYSTEM_DECRYPTION_KEY);
+  }
+  
+  if (!clientId || !clientSecret) {
     throw new Error('Google OAuth Client ID or Client Secret is not configured.');
   }
+  
   return new google.auth.OAuth2(
-    settings.client_id,
-    settings.client_secret,
+    clientId,
+    clientSecret,
     redirectUri
   );
 }

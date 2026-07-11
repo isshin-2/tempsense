@@ -222,6 +222,21 @@ router.post('/reports/:id/test', authMiddleware, requireRole('admin'), async (re
 const { checkForUpdates, installUpdate, startAutoUpdateScheduler } = require('../services/autoUpdater');
 const { runDiagnostics } = require('../services/diagnostics');
 
+// GET /api/settings/update/status - Lightweight cached update status check
+router.get('/update/status', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT update_available, last_update_check FROM system_settings LIMIT 1');
+    const r = result.rows[0] || { update_available: false, last_update_check: null };
+    res.json({
+      updateAvailable: r.update_available === true,
+      lastUpdateCheck: r.last_update_check
+    });
+  } catch (err) {
+    console.error('[SETTINGS] GET Update Status error:', err);
+    res.status(500).json({ error: 'Failed to retrieve update status' });
+  }
+});
+
 // GET /api/settings/update - Fetch update settings and git status
 router.get('/update', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
@@ -429,13 +444,15 @@ router.get('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => 
     }
     const r = result.rows[0];
     const connCheck = await pool.query('SELECT refresh_token FROM gdrive_settings WHERE id = 1');
+    const hasCustomClient = !!(r.client_id && r.client_id.trim());
     res.json({
       use_sync: r.use_sync === true,
       client_id: r.client_id || '',
       folder_id: r.folder_id || '',
       last_sync: r.last_sync,
       last_status: r.last_status,
-      is_connected: !!(connCheck.rows[0]?.refresh_token)
+      is_connected: !!(connCheck.rows[0]?.refresh_token),
+      isInbuiltUsed: !hasCustomClient && !!process.env.SYSTEM_DECRYPTION_KEY
     });
   } catch (err) {
     console.error('[SETTINGS] GET Google Drive error:', err);
