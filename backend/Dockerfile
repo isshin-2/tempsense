@@ -7,22 +7,31 @@ RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/*
 # Set the working directory to /app
 WORKDIR /app
 
-# Copy package files from backend directory
+# Copy package files for backend and frontend
 COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
 
-# Install dependencies in /app/backend
+# Install backend dependencies
 WORKDIR /app/backend
 RUN npm install --production
 
-# Go back to /app and copy the entire project (including .git)
+# Install frontend dependencies
+WORKDIR /app/frontend
+RUN npm install --legacy-peer-deps
+
+# Copy the rest of the files (including .git)
 WORKDIR /app
 COPY . .
 
-# Expose the HTTP API port and the TCP Sensor port
+# Build the frontend assets on docker build
+WORKDIR /app/frontend
+RUN npm run build
+
+# Expose ports
+WORKDIR /app/backend
 EXPOSE 3001
 EXPOSE 1024
 
-# Set environment defaults (can be overridden by docker-compose)
 ENV PORT=3001
 ENV TCP_PORT=1024
 ENV DB_HOST=db
@@ -31,6 +40,5 @@ ENV DB_NAME=tempsense
 ENV DB_USER=postgres
 ENV DB_PASS=postgres
 
-# Start the server from /app/backend
-WORKDIR /app/backend
+# Start the server
 CMD ["node", "server.js"]

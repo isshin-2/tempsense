@@ -90,6 +90,11 @@ app.use(express.json({ limit: '50mb' }));
 
 // Lock middleware to intercept requests
 const lockMiddleware = (req, res, next) => {
+  // Only lock API endpoints
+  if (!req.path.startsWith('/api/')) {
+    return next();
+  }
+
   // Allow health check, status check, and unlock requests
   if (
     req.path === '/api/health' ||
@@ -431,6 +436,23 @@ async function start() {
   });
 
   startTCPServer(TCP_PORT);
+}
+
+const path = require('path');
+const fs = require('fs');
+
+// Serve static assets from frontend build
+const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  
+  // Serve index.html for all non-API GET requests
+  app.get(/.*/, (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
 }
 
 start();

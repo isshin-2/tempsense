@@ -229,13 +229,19 @@ async function installUpdate() {
       console.log('[Updater] Backend npm install finished');
     }
 
-    // Check if frontend dependencies changed
-    let frontendInstallNeeded = hasDependenciesChanged(frontendPkgBefore, frontendPkgAfter);
+    // Check if frontend dependencies changed or node_modules is missing
+    const frontendNodeModules = path.join(FRONTEND_DIR, 'node_modules');
+    let frontendInstallNeeded = !fs.existsSync(frontendNodeModules) || hasDependenciesChanged(frontendPkgBefore, frontendPkgAfter);
     if (frontendInstallNeeded) {
-      console.log('[Updater] Frontend dependencies changed. Running npm install...');
-      await execPromise('npm install', { cwd: FRONTEND_DIR });
+      console.log('[Updater] Frontend dependencies missing or changed. Running npm install...');
+      await execPromise('npm install --legacy-peer-deps', { cwd: FRONTEND_DIR });
       console.log('[Updater] Frontend npm install finished');
     }
+
+    // Always compile the frontend assets to the backend's static directory
+    console.log('[Updater] Building frontend assets...');
+    await execPromise('npm run build', { cwd: FRONTEND_DIR });
+    console.log('[Updater] Frontend build completed');
 
     console.log('[Updater] Update applied. Restarting server in 1.5 seconds...');
     
