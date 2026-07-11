@@ -8,9 +8,9 @@ const router = express.Router();
 // GET /api/settings/smtp
 router.get('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT use_custom, host, port, user_email, secure, sender_name FROM smtp_settings LIMIT 1');
+    const result = await pool.query('SELECT use_custom, host, port, user_email, secure, sender_name, alert_cooldown FROM smtp_settings LIMIT 1');
     if (result.rows.length === 0) {
-      return res.json({ use_custom: false, sender_name: 'Tempsense Alerts' });
+      return res.json({ use_custom: false, sender_name: 'Tempsense Alerts', alert_cooldown: 60 });
     }
     const r = result.rows[0];
     res.json({
@@ -19,7 +19,8 @@ router.get('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
       port: r.use_custom ? (r.port || 587) : 587,
       user_email: r.use_custom ? (r.user_email || '') : '',
       secure: r.use_custom ? (r.secure === true) : false,
-      sender_name: r.sender_name || 'Tempsense Alerts'
+      sender_name: r.sender_name || 'Tempsense Alerts',
+      alert_cooldown: r.alert_cooldown || 60
     });
   } catch (err) {
     console.error('[SETTINGS] GET SMTP error:', err);
@@ -66,10 +67,12 @@ router.get('/smtp/test', authMiddleware, requireRole('admin'), async (req, res) 
 
 router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { use_custom, host, port, user_email, password, secure, sender_name } = req.body;
+    const { use_custom, host, port, user_email, password, secure, sender_name, alert_cooldown } = req.body;
     const isCustom = use_custom === true || use_custom === 'true' || (use_custom === undefined && host !== undefined);
     let finalPassword = password;
     
+    const cooldownVal = parseInt(alert_cooldown) || 60;
+
     // Check if exists
     const check = await pool.query('SELECT id, password as existing_password FROM smtp_settings LIMIT 1');
     if (check.rows.length > 0) {
@@ -84,9 +87,9 @@ router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
       }
       await pool.query(
         `UPDATE smtp_settings SET 
-          use_custom = $1, host = $2, port = $3, user_email = $4, password = $5, secure = $6, sender_name = $7, updated_at = NOW()
-         WHERE id = $8`,
-        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? finalPassword : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, check.rows[0].id]
+          use_custom = $1, host = $2, port = $3, user_email = $4, password = $5, secure = $6, sender_name = $7, alert_cooldown = $8, updated_at = NOW()
+         WHERE id = $9`,
+        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? finalPassword : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, cooldownVal, check.rows[0].id]
       );
     } else {
       if (isCustom) {
@@ -95,9 +98,9 @@ router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
         }
       }
       await pool.query(
-        `INSERT INTO smtp_settings (use_custom, host, port, user_email, password, secure, sender_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? password : null, isCustom ? (secure === true || secure === 'true') : false, sender_name]
+        `INSERT INTO smtp_settings (use_custom, host, port, user_email, password, secure, sender_name, alert_cooldown)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? password : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, cooldownVal]
       );
     }
 
@@ -113,7 +116,8 @@ router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
         user_email: isCustom ? user_email : null,
         password: isCustom ? finalPassword : null,
         secure: isCustom ? (secure === true || secure === 'true') : false,
-        sender_name
+        sender_name,
+        alert_cooldown: cooldownVal
       }, null, 2), 'utf8');
       console.log('[SETTINGS] SMTP backup saved to local json file');
     } catch (fsErr) {
@@ -438,7 +442,7 @@ router.post('/restore', authMiddleware, requireRole('admin'), async (req, res) =
 // GET /api/settings/gdrive - Fetch Google Drive sync configuration
 router.get('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT use_sync, folder_id, last_sync, last_status FROM gdrive_settings LIMIT 1');
+    const result = await pool.query('SELECT use_sync, folder_id, last_sync, last_status, sync_interval FROM gdrive_settings LIMIT 1');
     if (result.rows.length === 0) {
       return res.json({ use_sync: false });
     }
@@ -449,6 +453,7 @@ router.get('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => 
       folder_id: r.folder_id || '',
       last_sync: r.last_sync,
       last_status: r.last_status,
+      sync_interval: r.sync_interval || 24,
       is_connected: !!(connCheck.rows[0]?.refresh_token)
     });
   } catch (err) {
@@ -460,15 +465,17 @@ router.get('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => 
 // POST /api/settings/gdrive - Update Google Drive sync configuration
 router.post('/gdrive', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { use_sync, folder_id } = req.body;
+    const { use_sync, folder_id, sync_interval } = req.body;
+    const intervalVal = parseInt(sync_interval) || 24;
     
     await pool.query(
       `UPDATE gdrive_settings SET 
         use_sync = $1, 
         folder_id = $2,
+        sync_interval = $3,
         updated_at = NOW()
        WHERE id = 1`,
-      [use_sync === true, folder_id ? folder_id.trim() : '']
+      [use_sync === true, folder_id ? folder_id.trim() : '', intervalVal]
     );
 
     res.json({ success: true, message: 'Google Drive settings updated successfully' });

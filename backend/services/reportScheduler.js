@@ -33,7 +33,7 @@ async function startReportScheduler() {
 
 async function processGDriveBackup() {
   try {
-    const result = await pool.query('SELECT use_sync, last_sync, refresh_token FROM gdrive_settings WHERE id = 1');
+    const result = await pool.query('SELECT use_sync, last_sync, refresh_token, sync_interval FROM gdrive_settings WHERE id = 1');
     const s = result.rows[0];
     if (!s || !s.use_sync || !s.refresh_token) {
       return;
@@ -43,7 +43,8 @@ async function processGDriveBackup() {
     if (s.last_sync) {
       const lastSync = new Date(s.last_sync);
       const diffHours = (now - lastSync) / (1000 * 60 * 60);
-      if (diffHours < 23) {
+      const syncInterval = s.sync_interval || 24;
+      if (diffHours < (syncInterval - 0.5)) {
         return; // Already backed up recently
       }
     }

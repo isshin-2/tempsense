@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const { user, updateUser } = useAuth();
   
   const [smtp, setSmtp] = useState({
-    use_custom: false, host: '', port: 587, user_email: '', password: '', secure: false, sender_name: 'Tempsense Alerts'
+    use_custom: false, host: '', port: 587, user_email: '', password: '', secure: false, sender_name: 'Tempsense Alerts', alert_cooldown: 60
   });
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -48,7 +48,7 @@ export default function SettingsPage() {
 
   // Google Drive Sync States
   const [gdrive, setGDrive] = useState({
-    use_sync: false, folder_id: '', last_sync: '', last_status: '', is_connected: false
+    use_sync: false, folder_id: '', last_sync: '', last_status: '', is_connected: false, sync_interval: 24
   });
   const [gdriveLoading, setGDriveLoading] = useState(false);
   const [gdriveSaving, setGDriveSaving] = useState(false);
@@ -387,7 +387,8 @@ export default function SettingsPage() {
     try {
       await saveGDriveSettings({
         use_sync: gdrive.use_sync,
-        folder_id: gdrive.folder_id
+        folder_id: gdrive.folder_id,
+        sync_interval: gdrive.sync_interval
       });
       setStatus({ type: 'success', message: 'Google Drive settings updated successfully!' });
       loadGDriveSettings();
@@ -570,6 +571,22 @@ export default function SettingsPage() {
                       <label>Sender Name</label>
                       <input className="form-input" placeholder="Tempsense Alerts"
                         value={smtp.sender_name} onChange={e => setSmtp({ ...smtp, sender_name: e.target.value })} required />
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Alert Cooldown / Repeat Interval</label>
+                      <select className="form-input" style={{ width: '100%' }}
+                        value={smtp.alert_cooldown} onChange={e => setSmtp({ ...smtp, alert_cooldown: parseInt(e.target.value) || 60 })}>
+                        <option value={5}>5 Minutes</option>
+                        <option value={15}>15 Minutes</option>
+                        <option value={30}>30 Minutes</option>
+                        <option value={60}>1 Hour</option>
+                        <option value={120}>2 Hours</option>
+                        <option value={360}>6 Hours</option>
+                        <option value={720}>12 Hours</option>
+                        <option value={1440}>24 Hours</option>
+                      </select>
+                      <p className="text-xs text-muted mt-4">Minimum time delay before a repeating threshold breach alert email is sent for a node.</p>
                     </div>
 
                     {smtp.use_custom ? (
@@ -800,9 +817,23 @@ export default function SettingsPage() {
                                 onChange={e => setGDrive({ ...gdrive, use_sync: e.target.checked })}
                               />
                               <label htmlFor="gdriveUseSync" style={{ fontWeight: 600, fontSize: '13.5px', cursor: 'pointer', userSelect: 'none' }}>
-                                Enable Nightly Auto Backup
+                                Enable Automated Cloud Backup
                               </label>
                             </div>
+
+                            {gdrive.use_sync && (
+                              <div className="form-group mb-20">
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Backup Frequency / Interval</label>
+                                <select className="form-input" style={{ width: '100%' }}
+                                  value={gdrive.sync_interval} onChange={e => setGDrive({ ...gdrive, sync_interval: parseInt(e.target.value) || 24 })}>
+                                  <option value={12}>Every 12 Hours</option>
+                                  <option value={24}>Daily (Every 24 Hours)</option>
+                                  <option value={48}>Every 2 Days (48 Hours)</option>
+                                  <option value={168}>Weekly (Every 7 Days)</option>
+                                </select>
+                                <p className="text-xs text-muted mt-4">Select how often the system will automatically upload database snapshots to Google Drive.</p>
+                              </div>
+                            )}
 
                             <div className="form-group">
                               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Target Folder ID <span className="text-muted text-xs">(optional)</span></label>

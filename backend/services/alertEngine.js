@@ -43,10 +43,13 @@ async function checkAndAlert(nodeId, nodeName, roomName, siteName, readings) {
 
     if (breaches.length === 0) return;
 
-    // Check: was an alert sent for this node in the last hour?
+    // Check: was an alert sent for this node within the configured alert cooldown interval?
+    const settingsRes = await pool.query('SELECT alert_cooldown FROM smtp_settings LIMIT 1');
+    const cooldownMins = settingsRes.rows[0]?.alert_cooldown || 60;
+
     const recentAlert = await pool.query(
-      `SELECT id FROM alerts WHERE node_id = $1 AND sent_at > NOW() - INTERVAL '1 hour' LIMIT 1`,
-      [nodeId]
+      `SELECT id FROM alerts WHERE node_id = $1 AND sent_at > NOW() - ($2 * INTERVAL '1 minute') LIMIT 1`,
+      [nodeId, cooldownMins]
     );
 
     if (recentAlert.rows.length > 0) {

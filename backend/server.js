@@ -196,6 +196,8 @@ async function initDB() {
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS td_name VARCHAR(100) DEFAULT 'DHT Temp'`);
     await pool.query(`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS humidity_name VARCHAR(100) DEFAULT 'Humidity'`);
     await pool.query(`ALTER TABLE scheduled_reports ADD COLUMN IF NOT EXISTS exclude_alerts BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS alert_cooldown INT DEFAULT 60`);
+    await pool.query(`ALTER TABLE gdrive_settings ADD COLUMN IF NOT EXISTS sync_interval INT DEFAULT 24`);
     
     // RBAC Migration: Add new user columns
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);

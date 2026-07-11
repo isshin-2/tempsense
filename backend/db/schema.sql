@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS smtp_settings (
   password     VARCHAR(255),
   secure       BOOLEAN DEFAULT FALSE,
   sender_name  VARCHAR(255),
+  alert_cooldown INT DEFAULT 60,
   updated_at   TIMESTAMP DEFAULT NOW()
 );
 
@@ -154,6 +155,7 @@ CREATE TABLE IF NOT EXISTS gdrive_settings (
   folder_id            VARCHAR(255),
   last_sync            TIMESTAMP,
   last_status          TEXT,
+  sync_interval        INT DEFAULT 24,
   updated_at           TIMESTAMP DEFAULT NOW()
 );
 
