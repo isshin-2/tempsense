@@ -182,9 +182,24 @@ setSocketIO(io);
 
 // ===== Database Initialization =====
 async function initDB() {
+  let attempts = 10;
+  while (attempts > 0) {
+    try {
+      await pool.query('SELECT 1');
+      console.log('[DB] PostgreSQL connected');
+      break;
+    } catch (err) {
+      attempts--;
+      console.log(`[DB] Waiting for PostgreSQL... ${attempts} attempt(s) remaining (error: ${err.message})`);
+      if (attempts === 0) {
+        console.error('[DB] PostgreSQL connection failed after all retries:', err.message);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
   try {
-    await pool.query('SELECT 1');
-    console.log('[DB] PostgreSQL connected');
 
     // Run schema
     const fs = require('fs');
