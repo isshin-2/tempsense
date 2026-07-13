@@ -8,9 +8,9 @@ const router = express.Router();
 // GET /api/settings/smtp
 router.get('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT use_custom, host, port, user_email, secure, sender_name, alert_cooldown FROM smtp_settings LIMIT 1');
+    const result = await pool.query('SELECT use_custom, host, port, user_email, secure, sender_name, alert_cooldown, alert_recipient FROM smtp_settings LIMIT 1');
     if (result.rows.length === 0) {
-      return res.json({ use_custom: false, sender_name: 'Tempsense Alerts', alert_cooldown: 60 });
+      return res.json({ use_custom: false, sender_name: 'Tempsense Alerts', alert_cooldown: 60, alert_recipient: '' });
     }
     const r = result.rows[0];
     res.json({
@@ -20,7 +20,8 @@ router.get('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
       user_email: r.use_custom ? (r.user_email || '') : '',
       secure: r.use_custom ? (r.secure === true) : false,
       sender_name: r.sender_name || 'Tempsense Alerts',
-      alert_cooldown: r.alert_cooldown || 60
+      alert_cooldown: r.alert_cooldown || 60,
+      alert_recipient: r.alert_recipient || ''
     });
   } catch (err) {
     console.error('[SETTINGS] GET SMTP error:', err);
@@ -67,7 +68,7 @@ router.get('/smtp/test', authMiddleware, requireRole('admin'), async (req, res) 
 
 router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { use_custom, host, port, user_email, password, secure, sender_name, alert_cooldown } = req.body;
+    const { use_custom, host, port, user_email, password, secure, sender_name, alert_cooldown, alert_recipient } = req.body;
     const isCustom = use_custom === true || use_custom === 'true' || (use_custom === undefined && host !== undefined);
     let finalPassword = password;
     
@@ -87,9 +88,9 @@ router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
       }
       await pool.query(
         `UPDATE smtp_settings SET 
-          use_custom = $1, host = $2, port = $3, user_email = $4, password = $5, secure = $6, sender_name = $7, alert_cooldown = $8, updated_at = NOW()
-         WHERE id = $9`,
-        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? finalPassword : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, cooldownVal, check.rows[0].id]
+          use_custom = $1, host = $2, port = $3, user_email = $4, password = $5, secure = $6, sender_name = $7, alert_cooldown = $8, alert_recipient = $9, updated_at = NOW()
+         WHERE id = $10`,
+        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? finalPassword : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, cooldownVal, alert_recipient || null, check.rows[0].id]
       );
     } else {
       if (isCustom) {
@@ -98,9 +99,9 @@ router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
         }
       }
       await pool.query(
-        `INSERT INTO smtp_settings (use_custom, host, port, user_email, password, secure, sender_name, alert_cooldown)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? password : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, cooldownVal]
+        `INSERT INTO smtp_settings (use_custom, host, port, user_email, password, secure, sender_name, alert_cooldown, alert_recipient)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [isCustom, isCustom ? host : null, isCustom ? parseInt(port) : null, isCustom ? user_email : null, isCustom ? password : null, isCustom ? (secure === true || secure === 'true') : false, sender_name, cooldownVal, alert_recipient || null]
       );
     }
 
@@ -117,7 +118,8 @@ router.post('/smtp', authMiddleware, requireRole('admin'), async (req, res) => {
         password: isCustom ? finalPassword : null,
         secure: isCustom ? (secure === true || secure === 'true') : false,
         sender_name,
-        alert_cooldown: cooldownVal
+        alert_cooldown: cooldownVal,
+        alert_recipient: alert_recipient || null
       }, null, 2), 'utf8');
       console.log('[SETTINGS] SMTP backup saved to local json file');
     } catch (fsErr) {

@@ -269,6 +269,9 @@ async function initDB() {
       
       // Migration for system_settings update_available column
       await pool.query('ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS update_available BOOLEAN DEFAULT FALSE');
+      
+      // Migration for smtp_settings alert_recipient column
+      await pool.query('ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS alert_recipient VARCHAR(255)');
     } catch (e) {
       console.error('[DB] Database migrations error:', e.message);
     }

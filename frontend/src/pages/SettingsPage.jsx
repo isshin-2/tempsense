@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const { user, updateUser } = useAuth();
   
   const [smtp, setSmtp] = useState({
-    use_custom: false, host: '', port: 587, user_email: '', password: '', secure: false, sender_name: 'Tempsense Alerts', alert_cooldown: 60
+    use_custom: false, host: '', port: 587, user_email: '', password: '', secure: false, sender_name: 'Tempsense Alerts', alert_cooldown: 60, alert_recipient: ''
   });
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -571,6 +571,13 @@ export default function SettingsPage() {
                       <label>Sender Name</label>
                       <input className="form-input" placeholder="Tempsense Alerts"
                         value={smtp.sender_name} onChange={e => setSmtp({ ...smtp, sender_name: e.target.value })} required />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Alert Recipient Email</label>
+                      <input className="form-input" type="email" placeholder="alerts@yourcompany.com"
+                        value={smtp.alert_recipient} onChange={e => setSmtp({ ...smtp, alert_recipient: e.target.value })} />
+                      <p className="text-xs text-muted mt-4">The email address that will receive threshold breach alerts. Leave blank to use the SMTP sender email.</p>
                     </div>
 
                     <div className="form-group">

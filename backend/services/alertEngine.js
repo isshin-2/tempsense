@@ -61,8 +61,8 @@ async function checkAndAlert(nodeId, nodeName, roomName, siteName, readings) {
     const message = breaches.join('\n');
     
     // Fetch global alert recipient from settings or env
-    const smtpRes = await pool.query('SELECT user_email FROM smtp_settings LIMIT 1');
-    const recipient = smtpRes.rows[0]?.user_email || process.env.ALERT_TO || 'admin@maxworth.in';
+    const smtpRes = await pool.query('SELECT alert_recipient, user_email FROM smtp_settings LIMIT 1');
+    const recipient = smtpRes.rows[0]?.alert_recipient || smtpRes.rows[0]?.user_email || process.env.ALERT_TO || 'admin@maxworth.in';
 
     const emailBody = `
 ⚠️ TEMPSENSE THRESHOLD ALERT
