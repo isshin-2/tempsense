@@ -194,7 +194,7 @@ tempsense/
 │   ├── Dockerfile           # Docker build for frontend (Nginx)
 │   └── package.json
 │
-├── docker-compose.yml       # Multi-container orchestration
+├── docker compose.yml       # Multi-container orchestration
 ├── run.bat                  # One-click local launcher (Windows)
 ├── stop.bat                 # Stop local services (Windows)
 ├── docker-start.bat         # One-click Docker launcher (Windows)
@@ -271,11 +271,11 @@ psql -U postgres -c "CREATE DATABASE tempsense;"
 
 ### Docker: `port is already allocated`
 
-Stop conflicting services or change ports in `docker-compose.yml`:
+Stop conflicting services or change ports in `docker compose.yml`:
 ```powershell
-docker-compose down
+docker compose down
 # Then restart
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### Frontend shows blank page / API errors
