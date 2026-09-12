@@ -15,7 +15,9 @@ COPY frontend/package*.json ./frontend/
 WORKDIR /app/backend
 RUN npm install --production
 
-# (Frontend dependencies will be installed after COPY to guarantee no host interference)
+# Install frontend dependencies
+WORKDIR /app/frontend
+RUN npm install --legacy-peer-deps
 
 # Copy the rest of the files (including .git)
 WORKDIR /app
@@ -23,7 +25,7 @@ COPY . .
 
 # Build the frontend assets on docker build
 WORKDIR /app/frontend
-RUN rm -rf node_modules && npm install --include=dev --legacy-peer-deps && npm run build
+RUN npm run build
 
 # Expose ports
 WORKDIR /app/backend
