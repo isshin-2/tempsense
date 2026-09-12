@@ -15,17 +15,14 @@ COPY frontend/package*.json ./frontend/
 WORKDIR /app/backend
 RUN npm install --production
 
-# Install frontend dependencies
-WORKDIR /app/frontend
-RUN npm install --legacy-peer-deps
-
 # Copy the rest of the files (including .git)
 WORKDIR /app
 COPY . .
 
 # Build the frontend assets on docker build
 WORKDIR /app/frontend
-RUN npm run build
+ENV NODE_ENV=development
+RUN rm -rf node_modules && npm install --legacy-peer-deps && npm run build
 
 # Expose ports
 WORKDIR /app/backend
@@ -41,4 +38,5 @@ ENV DB_USER=postgres
 ENV DB_PASS=postgres
 
 # Start the server
+ENV NODE_ENV=production
 CMD ["node", "server.js"]
