@@ -1,5 +1,5 @@
-# Use Node.js 20 alpine as the base image for smaller size and fewer DNS/network issues
-FROM node:20-alpine
+# Use Node.js 22 alpine as the base image for latest features and security updates
+FROM node:22-alpine
 
 # Install curl and git for health checks and update checks
 RUN apk add --no-cache curl git

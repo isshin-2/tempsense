@@ -84,7 +84,7 @@ echo   [2/4] Building and starting containers...
 echo         This may take a few minutes on first run...
 echo.
 
-docker-compose up -d --build
+docker compose up -d --build
 if %errorlevel% neq 0 (
     echo.
     echo   ╔══════════════════════════════════════════════════════╗
@@ -93,7 +93,7 @@ if %errorlevel% neq 0 (
     echo   ║  Check the error messages above for details.        ║
     echo   ║  Common fixes:                                       ║
     echo   ║  - Ensure ports 81, 3001, 5432, 8080 are free       ║
-    echo   ║  - Run: docker-compose down --volumes              ║
+    echo   ║  - Run: docker compose down --volumes              ║
     echo   ║  - Then try this script again                       ║
     echo   ╚══════════════════════════════════════════════════════╝
     echo.
@@ -135,7 +135,7 @@ echo.
 echo   ╔══════════════════════════════════════════════════════╗
 echo   ║  WARNING: Health check timed out after 90 seconds.  ║
 echo   ║  The backend may still be starting up.              ║
-echo   ║  Run: docker-compose logs backend                   ║
+echo   ║  Run: docker compose logs backend                   ║
 echo   ╚══════════════════════════════════════════════════════╝
 echo.
 goto show_status
@@ -200,14 +200,14 @@ if "!CHOICE!"=="1" (
     echo.
     echo   Showing live logs... Press Ctrl+C to stop viewing.
     echo.
-    docker-compose logs -f
+    docker compose logs -f
     goto menu_choice
 )
 
 if "!CHOICE!"=="2" (
     echo.
     echo   Stopping all containers...
-    docker-compose down
+    docker compose down
     echo.
     echo   ╔══════════════════════════════════════════════════════╗
     echo   ║  All containers have been stopped.                  ║
@@ -222,7 +222,7 @@ if "!CHOICE!"=="2" (
 if "!CHOICE!"=="3" (
     echo.
     echo   Containers will keep running in the background.
-    echo   Use 'docker-compose down' to stop them later.
+    echo   Use 'docker compose down' to stop them later.
     echo.
     timeout /t 2 >nul
     exit /b 0
