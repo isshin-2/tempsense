@@ -1,8 +1,8 @@
-# Use Node.js 20 slim as the base image
-FROM node:20-slim
+# Use Node.js 20 alpine as the base image for smaller size and fewer DNS/network issues
+FROM node:20-alpine
 
 # Install curl and git for health checks and update checks
-RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl git
 
 # Set the working directory to /app
 WORKDIR /app
