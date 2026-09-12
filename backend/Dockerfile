@@ -23,7 +23,7 @@ COPY . .
 
 # Build the frontend assets on docker build
 WORKDIR /app/frontend
-RUN rm -rf node_modules && npm install --legacy-peer-deps && npm run build
+RUN rm -rf node_modules && npm install --include=dev --legacy-peer-deps && npm run build
 
 # Expose ports
 WORKDIR /app/backend
