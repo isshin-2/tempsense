@@ -45,16 +45,27 @@ if %errorlevel% neq 0 (
 
 docker info >nul 2>&1
 if %errorlevel% neq 0 (
-    echo.
-    echo   ╔══════════════════════════════════════════════════════╗
-    echo   ║  ERROR: Docker daemon is not running!               ║
-    echo   ║                                                      ║
-    echo   ║  Please start Docker Desktop and wait for it to     ║
-    echo   ║  finish loading, then run this script again.        ║
-    echo   ╚══════════════════════════════════════════════════════╝
-    echo.
-    pause
-    exit /b 1
+    echo   Docker daemon is not running! Attempting to start Docker Desktop...
+    if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
+        start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        echo   Waiting for Docker to start (this can take 30-60 seconds)...
+        :wait_docker
+        timeout /t 5 /nobreak >nul
+        docker info >nul 2>&1
+        if !errorlevel! neq 0 goto wait_docker
+        echo   Docker started successfully.
+    ) else (
+        echo.
+        echo   ╔══════════════════════════════════════════════════════╗
+        echo   ║  ERROR: Docker daemon is not running!               ║
+        echo   ║                                                      ║
+        echo   ║  Please start Docker Desktop and wait for it to     ║
+        echo   ║  finish loading, then run this script again.        ║
+        echo   ╚══════════════════════════════════════════════════════╝
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
 for /f "tokens=*" %%i in ('docker --version') do set DOCKER_VER=%%i

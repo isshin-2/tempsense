@@ -91,11 +91,41 @@ async function exchangeCode(code, redirectUri) {
   return { success: true };
 }
 
+async function getOrCreateBackupFolder(drive, settings) {
+  if (settings.folder_id && settings.folder_id.trim()) {
+    try {
+      await drive.files.get({ fileId: settings.folder_id.trim(), fields: 'id' });
+      return settings.folder_id.trim();
+    } catch (e) {}
+  }
+
+  const FOLDER_NAME = 'TEMPSENSE_BACKUPS';
+  const res = await drive.files.list({
+    q: `mimeType='application/vnd.google-apps.folder' and name='${FOLDER_NAME}' and trashed=false`,
+    fields: 'files(id)',
+    spaces: 'drive'
+  });
+
+  if (res.data.files.length > 0) {
+    const folderId = res.data.files[0].id;
+    await pool.query('UPDATE gdrive_settings SET folder_id = $1 WHERE id = 1', [folderId]);
+    return folderId;
+  }
+
+  const folder = await drive.files.create({
+    requestBody: { name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' },
+    fields: 'id'
+  });
+  
+  await pool.query('UPDATE gdrive_settings SET folder_id = $1 WHERE id = 1', [folder.data.id]);
+  return folder.data.id;
+}
+
 /**
  * Perform backup generation and upload to Google Drive
  */
 async function uploadBackup() {
-  const settings = await getGDriveSettings();
+  let settings = await getGDriveSettings();
   if (!settings || !settings.refresh_token) {
     throw new Error('Google Drive account is not connected.');
   }
@@ -106,6 +136,9 @@ async function uploadBackup() {
   });
 
   const drive = google.drive({ version: 'v3', auth: oauth2Client });
+  
+  // Auto-create or get folder
+  const folderId = await getOrCreateBackupFolder(drive, settings);
 
   // Generate backup snapshot payload
   const sites = await pool.query('SELECT * FROM sites ORDER BY id ASC');
@@ -130,12 +163,9 @@ async function uploadBackup() {
   
   const fileMetadata = {
     name: filename,
-    mimeType: 'application/json'
+    mimeType: 'application/json',
+    parents: [folderId]
   };
-
-  if (settings.folder_id && settings.folder_id.trim()) {
-    fileMetadata.parents = [settings.folder_id.trim()];
-  }
 
   const Readable = require('stream').Readable;
   const stream = new Readable();

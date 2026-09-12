@@ -419,11 +419,11 @@ export async function installUpdate() {
   return data;
 }
 
-export async function saveUpdateConfig(enabled, interval) {
+export async function saveUpdateConfig(enabled, interval, dataRetentionDays) {
   const res = await fetch(`${API_BASE}/settings/update/config`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ auto_update_enabled: enabled, auto_update_interval: interval }),
+    body: JSON.stringify({ auto_update_enabled: enabled, auto_update_interval: interval, data_retention_days: dataRetentionDays }),
   });
   if (!res.ok) throw new Error('Failed to save update configuration');
   return res.json();

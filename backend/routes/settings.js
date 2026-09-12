@@ -246,8 +246,8 @@ router.get('/update/status', authMiddleware, async (req, res) => {
 // GET /api/settings/update - Fetch update settings and git status
 router.get('/update', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const configRes = await pool.query('SELECT auto_update_enabled, auto_update_interval, last_update_check FROM system_settings LIMIT 1');
-    const config = configRes.rows[0] || { auto_update_enabled: true, auto_update_interval: 24, last_update_check: null };
+    const configRes = await pool.query('SELECT auto_update_enabled, auto_update_interval, last_update_check, data_retention_days FROM system_settings LIMIT 1');
+    const config = configRes.rows[0] || { auto_update_enabled: true, auto_update_interval: 24, last_update_check: null, data_retention_days: 0 };
     
     const gitStatus = await checkForUpdates();
     
@@ -255,7 +255,8 @@ router.get('/update', authMiddleware, requireRole('admin'), async (req, res) => 
       config: {
         autoUpdateEnabled: config.auto_update_enabled === true,
         autoUpdateInterval: config.auto_update_interval || 24,
-        lastUpdateCheck: config.last_update_check
+        lastUpdateCheck: config.last_update_check,
+        dataRetentionDays: config.data_retention_days || 0
       },
       git: gitStatus
     });
@@ -293,19 +294,24 @@ router.post('/update/install', authMiddleware, requireRole('admin'), async (req,
 // POST /api/settings/update/config - Save automatic check config
 router.post('/update/config', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const { auto_update_enabled, auto_update_interval } = req.body;
+    const { auto_update_enabled, auto_update_interval, data_retention_days } = req.body;
     
     if (auto_update_interval && (isNaN(auto_update_interval) || auto_update_interval <= 0)) {
       return res.status(400).json({ error: 'Update interval must be a positive number of hours' });
+    }
+
+    if (data_retention_days !== undefined && (isNaN(data_retention_days) || data_retention_days < 0)) {
+      return res.status(400).json({ error: 'Data retention days must be 0 or a positive number' });
     }
 
     await pool.query(
       `UPDATE system_settings SET 
         auto_update_enabled = $1, 
         auto_update_interval = $2,
+        data_retention_days = COALESCE($3, data_retention_days),
         updated_at = NOW()
        WHERE id = 1`,
-      [auto_update_enabled === true, auto_update_interval || 24]
+      [auto_update_enabled === true, auto_update_interval || 24, data_retention_days]
     );
 
     // Restart/apply scheduler configuration

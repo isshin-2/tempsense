@@ -160,7 +160,7 @@ export default function SettingsPage() {
   async function handleToggleAutoCheck(enabled) {
     setSavingConfig(true);
     try {
-      await saveUpdateConfig(enabled, updateInfo?.config?.autoUpdateInterval || 24);
+      await saveUpdateConfig(enabled, updateInfo?.config?.autoUpdateInterval || 24, updateInfo?.config?.dataRetentionDays || 0);
       setUpdateInfo(prev => ({
         ...prev,
         config: {
@@ -168,6 +168,25 @@ export default function SettingsPage() {
           autoUpdateEnabled: enabled
         }
       }));
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message });
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
+  async function handleSaveRetention(days) {
+    setSavingConfig(true);
+    try {
+      await saveUpdateConfig(updateInfo?.config?.autoUpdateEnabled, updateInfo?.config?.autoUpdateInterval || 24, days);
+      setUpdateInfo(prev => ({
+        ...prev,
+        config: {
+          ...prev.config,
+          dataRetentionDays: days
+        }
+      }));
+      setStatus({ type: 'success', message: 'Data retention policy updated.' });
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
     } finally {
@@ -1005,6 +1024,39 @@ export default function SettingsPage() {
                           Enable Automatic Background Update Checking
                         </label>
                         {savingConfig && <Loader2 size={14} className="animate-spin text-muted" />}
+                      </div>
+
+                      <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--text-primary)' }}>Data Retention Policy</h4>
+                        <p className="text-sm text-muted" style={{ margin: '0 0 16px 0' }}>
+                          Automatically delete historical sensor data older than the specified number of days to conserve database space. Set to 0 to keep data forever.
+                        </p>
+                        <div className="flex items-center gap-12">
+                          <input 
+                            type="number" 
+                            className="form-input" 
+                            style={{ width: '120px' }} 
+                            min="0"
+                            placeholder="Days"
+                            value={updateInfo?.config?.dataRetentionDays ?? ''}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setUpdateInfo(prev => ({
+                                ...prev,
+                                config: { ...prev.config, dataRetentionDays: val }
+                              }));
+                            }}
+                          />
+                          <span className="text-sm text-muted">days</span>
+                          <button 
+                            className="btn btn-ghost btn-xs" 
+                            style={{ marginLeft: '12px' }}
+                            onClick={() => handleSaveRetention(updateInfo?.config?.dataRetentionDays || 0)}
+                            disabled={savingConfig}
+                          >
+                            Save Policy
+                          </button>
+                        </div>
                       </div>
 
                       {/* Action Buttons */}

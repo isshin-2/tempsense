@@ -114,9 +114,45 @@ const lockMiddleware = (req, res, next) => {
 
 app.use(lockMiddleware);
 
+// Database auto-pruning task
+async function startDataPruning() {
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const res = await pool.query('SELECT data_retention_days FROM system_settings LIMIT 1');
+      if (res.rows.length > 0) {
+        const days = res.rows[0].data_retention_days;
+        if (days && days > 0) {
+          const result = await pool.query(`DELETE FROM sensor_data WHERE timestamp < NOW() - INTERVAL '${days} days'`);
+          if (result.rowCount > 0) {
+            console.log(`[DB] Auto-pruned ${result.rowCount} old sensor data records (Older than ${days} days)`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[DB] Auto-pruning failed:', err.message);
+    }
+  }, ONE_DAY);
+  
+  // Run once on startup after 5 seconds
+  setTimeout(async () => {
+    try {
+      const res = await pool.query('SELECT data_retention_days FROM system_settings LIMIT 1');
+      if (res.rows.length > 0 && res.rows[0].data_retention_days > 0) {
+        const days = res.rows[0].data_retention_days;
+        const result = await pool.query(`DELETE FROM sensor_data WHERE timestamp < NOW() - INTERVAL '${days} days'`);
+        if (result.rowCount > 0) {
+          console.log(`[DB] Auto-pruned ${result.rowCount} old sensor data records (Older than ${days} days)`);
+        }
+      }
+    } catch (err) {}
+  }, 5000);
+}
+
 // Helper to initialize all services once the database is unlocked
 async function setupUnlockedServices() {
   await initDB();
+  startDataPruning();
   startReportScheduler();
   try {
     const { startAutoUpdateScheduler } = require('./services/autoUpdater');
@@ -284,6 +320,7 @@ async function initDB() {
       
       // Migration for system_settings update_available column
       await pool.query('ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS update_available BOOLEAN DEFAULT FALSE');
+      await pool.query('ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS data_retention_days INT DEFAULT 0');
       
       // Migration for smtp_settings alert_recipient column
       await pool.query('ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS alert_recipient VARCHAR(255)');
