@@ -1,8 +1,8 @@
-# Use Node.js 20 alpine as the base image for stability
-FROM node:20-alpine
+# Use Node.js 20 slim as the base image to avoid Alpine/musl npm crashes
+FROM node:20-slim
 
-# Install curl and git for health checks and update checks
-RUN apk add --no-cache curl git
+# Install curl and git for health checks and update checks (forcing IPv4 to avoid DNS hangs)
+RUN apt-get update -o Acquire::ForceIPv4=true && apt-get install -y --no-install-recommends curl git ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory to /app
 WORKDIR /app
